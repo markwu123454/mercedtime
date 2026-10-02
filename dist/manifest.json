@@ -3,13 +3,17 @@
   "name": "MercedTime",
   "version": "0.1.0",
   "description": "A faster front-end for UC Merced's Banner registration pages.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "declarativeNetRequest"],
   "host_permissions": ["https://reg-prod.ec.ucmerced.edu/*"],
-  "content_scripts": [
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "redirect", "enabled": true, "path": "rules.json" }
+    ]
+  },
+  "web_accessible_resources": [
     {
-      "matches": ["https://reg-prod.ec.ucmerced.edu/StudentRegistrationSsb/ssb/*"],
-      "js": ["mercedtime.js"],
-      "run_at": "document_idle"
+      "resources": ["app.html"],
+      "matches": ["https://reg-prod.ec.ucmerced.edu/*"]
     }
   ]
 }

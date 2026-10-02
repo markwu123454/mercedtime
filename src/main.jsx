@@ -1,52 +1,28 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
-import { hideBannerChrome, bannerUserName } from './lib/banner.js';
 import { boot } from './lib/store.js';
 
-// Imported as strings, not as a stylesheet: Vite would otherwise emit a <link> or a
-// <style> into the host page's <head>, which is the thing the shadow root exists to
-// avoid. `?inline` gives us the text to put inside the boundary instead.
+// Imported as strings, not as a stylesheet: the shadow root below owns all styling, so
+// `?inline` gives us the text to put inside the boundary instead of a <link> in <head>.
 import tokensCSS from './styles/tokens.css?inline';
 import appCSS from './styles/app.css?inline';
 
-// --- route guard -------------------------------------------------------------
-// The manifest matches all of /ssb/*, so this bundle loads on every Banner page.
-// Anything not listed here falls through to Banner untouched — above all
-// classRegistration, which owns the real add/drop and must never be taken over.
-// Add a route here only once there is code behind it.
-const ROUTES = ['registration', 'classSearch'];
+// This is the extension's own page (app.html). The redirect rule in rules.json sends
+// /ssb/courseSearch/courseSearch here, so nothing from Banner is on the page and there
+// is no host DOM to read or hide.
+const host = document.createElement('div');
+host.id = 'mercedtime-root';
+document.body.append(host);
+const shadow = host.attachShadow({ mode: 'closed' });
 
-function shouldMount() {
-    const section = (location.pathname.match(/\/ssb\/([^/]+)/) || [])[1];
-    if (!ROUTES.includes(section)) return false;
-    // /ssb/registration/registerPostSignIn is the SSO landing hop that replays the
-    // mode you were heading to before logging in. It normally 302s without rendering,
-    // but never take it over if it ever does — that would swallow the deep link.
-    if (/\/ssb\/registration\/registerPostSignIn/.test(location.pathname)) return false;
-    return true;
-}
+const style = document.createElement('style');
+style.textContent = tokensCSS + '\n' + appCSS;
+shadow.append(style);
 
-if (shouldMount()) {
-    const userName = bannerUserName();   // read before we hide the header
-    hideBannerChrome();
+const mount = document.createElement('div');
+mount.className = 'app';
+shadow.append(mount);
 
-    // closed mode: Banner's scripts cannot reach in and query our tree, and ours
-    // cannot be styled by its CSS. The dropdown-clipping bug that started this
-    // project is structurally impossible on this side of the boundary.
-    const host = document.createElement('div');
-    host.id = 'mercedtime-root';
-    document.body.append(host);
-    const shadow = host.attachShadow({ mode: 'closed' });
-
-    const style = document.createElement('style');
-    style.textContent = tokensCSS + '\n' + appCSS;
-    shadow.append(style);
-
-    const mount = document.createElement('div');
-    mount.className = 'app';
-    shadow.append(mount);
-
-    createRoot(mount).render(<React.StrictMode><App /></React.StrictMode>);
-    boot({ userName });
-}
+createRoot(mount).render(<React.StrictMode><App /></React.StrictMode>);
+boot();

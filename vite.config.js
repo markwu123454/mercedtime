@@ -18,7 +18,7 @@ export default defineConfig({
         outDir: 'dist',
         emptyOutDir: false,        // manifest.json + icons live in dist/ too
         target: 'chrome110',
-        minify: false,             // a content script users may want to read; size is local anyway
+        minify: false,             // users may want to read the shipped code; size is local anyway
         rollupOptions: {
             input: 'src/main.jsx',
             output: {

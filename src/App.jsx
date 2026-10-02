@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useStore, set as setState } from './lib/store.js';
-import { observeNotifications, bannerSignOut } from './lib/banner.js';
+import { useStore } from './lib/store.js';
+import { BASE } from './lib/api.js';
 import Search from './routes/Search.jsx';
 import Standing from './routes/Standing.jsx';
 import Plan from './routes/Plan.jsx';
@@ -27,11 +27,7 @@ const TABS = [
 
 export default function App() {
     const route = useHashRoute();
-    const { userName, auth, notifications } = useStore((s) => s);
-
-    // Banner writes real errors and the session-timeout prompt into a notification
-    // centre inside the header we hide. Mirror it or those become unreachable.
-    useEffect(() => observeNotifications((n) => setState({ notifications: n })), []);
+    const { auth, notifications } = useStore((s) => s);
 
     return (
         <>
@@ -44,15 +40,10 @@ export default function App() {
                     ))}
                 </nav>
                 <span className="masthead-spacer" />
-                {auth === 'in' && userName
-                    ? <>
-                        <span className="masthead-user">{userName}</span>
-                        <button className="nav-item" onClick={bannerSignOut}>Sign out</button>
-                      </>
-                    : <span className="masthead-user">Not signed in</span>}
+                <span className="masthead-user">{auth === 'in' ? 'Signed in' : 'Not signed in'}</span>
                 {/* The one control that leaves the app. Banner owns add/drop; we never do. */}
                 <a className="exit-button"
-                   href="/StudentRegistrationSsb/ssb/term/termSelection?mode=registration">
+                   href={`${BASE}/term/termSelection?mode=registration`}>
                     Register &rarr;
                 </a>
             </header>

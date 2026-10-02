@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "redirect", "redirect": { "extensionPath": "/app.html" } },
+    "condition": {
+      "urlFilter": "||reg-prod.ec.ucmerced.edu/StudentRegistrationSsb/ssb/courseSearch/courseSearch",
+      "resourceTypes": ["main_frame"]
+    }
+  }
+]

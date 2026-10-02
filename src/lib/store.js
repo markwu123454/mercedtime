@@ -67,8 +67,7 @@ api.onSessionLost((kind) => set({
 
 // --- boot --------------------------------------------------------------------
 
-export async function boot({ userName }) {
-    set({ auth: userName ? 'in' : 'out', userName });
+export async function boot() {
     api.startKeepAlive();
 
     let terms = [];
@@ -86,7 +85,9 @@ export async function boot({ userName }) {
 
     // Which terms are open for registration. Authenticated and optional — its absence
     // just means we cannot show the registration window, not that anything is broken.
-    api.getOpenTerms().then((openTerms) => set({ openTerms })).catch(() => {});
+    // Succeeding also tells us there is a signed-in Banner session, since there is no
+    // Banner header to read the user from.
+    api.getOpenTerms().then((openTerms) => set({ openTerms, auth: 'in' })).catch(() => {});
 
     if (term) await selectTerm(term);
 }

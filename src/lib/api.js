@@ -70,10 +70,9 @@ async function getJSON(path) {
 
 // --- term state -------------------------------------------------------------
 
-const MODE_BY_PATH = { classSearch: 'search', courseSearch: 'courseSearch' };
-/** The mode slot this page reads from. */
-export const currentMode = () =>
-    MODE_BY_PATH[(location.pathname.match(/\/ssb\/([^/]+)/) || [])[1]] || 'search';
+/** The mode slot this app reads from. The app runs on its own page, so there is no
+ *  Banner path to infer it from. */
+export const currentMode = () => 'search';
 
 // Banner's own format: 5 random characters followed by epoch milliseconds.
 const uniqueSessionId = () =>

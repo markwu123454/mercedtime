@@ -21,17 +21,19 @@ npm install
 npm run build      # or: npm run watch
 ```
 
-Load `dist/` as an unpacked extension.
+Load `dist/` as an unpacked extension. The extension redirects
+`/ssb/courseSearch/courseSearch` to its own page (`dist/app.html`); no content script
+runs on Banner pages.
 
 ## Layout
 
 ```
 src/
-  main.jsx            route guard, Banner chrome takeover, shadow-root mount
+  main.jsx            shadow-root mount for dist/app.html
   App.jsx             shell: masthead, hash router, notification mirror
   lib/api.js          every network call; owns the four session failure modes
   lib/sections.js     pure Banner data logic — bundles, seats, tiers, search ranking
-  lib/banner.js       host-page DOM: hide chrome, mirror notifications, parse status
+  lib/banner.js       parses Banner's server-rendered status HTML
   lib/store.js        shared state + plan persistence
   routes/             Search (built), Standing / Plan / History (stubs)
 fixtures/             offline test data — see below
