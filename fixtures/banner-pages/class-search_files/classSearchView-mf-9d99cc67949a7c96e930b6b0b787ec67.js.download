@@ -1,0 +1,4 @@
+//# sourceMappingURL=classSearchView-mf.js.map
+var process=process||{env:{NODE_ENV:"development"}};
+$(document).ready(function(){var a=$("#content").layout({name:"pageLayout",resizeWithWindow:!0,resizeWithWindowDelay:250,resizable:!1,slidable:!1,closable:!1,center__paneSelector:"#inner-north",south__paneSelector:"#inner-south",south__size:50,spacing_open:0,spacing_closed:0});$("#inner-north").layout({name:"pageLayout",applyDefaultStyles:!0,resizeWithWindow:!0,resizeWithWindowDelay:250,resizable:!1,slidable:!1,closable:!1,spacing_open:0,spacing_closed:0,north__paneSelector:".ui-layout-north",center__paneSelector:".ui-layout-center",
+south__paneSelector:".ui-layout-south"});a.resizeAll();$("#searchResults").hide();$("#searchAgainTerms").hide()});function initializeTabOrder(){}$(function(){initializeTabOrder();window.notifications.bind("add",function(){_.defer(function(){})})});process=process||{env:{NODE_ENV:"development"}};

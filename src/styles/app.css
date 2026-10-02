@@ -1,0 +1,195 @@
+/* Everything here is scoped by the shadow root, so no defensive resets against Banner
+   and no !important anywhere. That is the whole point of the shadow boundary: the
+   `input, .combo, select { height: 20px }` rule in Banner's registration stylesheet —
+   which used to clip our select text — cannot reach past it. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:host {
+    all: initial;
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: block;
+    font-family: var(--font-sans);
+    font-size: var(--body-compact-size);
+    line-height: var(--body-compact-height);
+    letter-spacing: var(--body-compact-spacing);
+    color: var(--text-primary);
+    background: var(--background);
+}
+
+.app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+/* Carbon focus is a 2px inset ring, never a glow. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+}
+
+/* --- top bar -------------------------------------------------------------- */
+.masthead {
+    display: flex; align-items: center; gap: var(--spacing-05);
+    padding: 0 var(--spacing-05);
+    height: 48px; flex: none;
+    background: var(--gray-100); color: var(--text-on-color);
+}
+.masthead-brand { font-size: var(--body-compact-size); letter-spacing: 0.1px; }
+.masthead-brand b { font-weight: 600; }
+.masthead-spacer { margin-left: auto; }
+.masthead-user { color: var(--gray-30); font-size: var(--label-01-size); }
+
+.nav { display: flex; height: 100%; }
+.nav-item {
+    display: flex; align-items: center; padding: 0 var(--spacing-05);
+    background: none; border: 0; cursor: pointer;
+    color: var(--gray-30); font: inherit; font-size: var(--body-compact-size);
+    border-bottom: 3px solid transparent;
+    transition: background var(--duration-fast) var(--ease-productive);
+}
+.nav-item:hover { background: var(--gray-80); color: var(--white); }
+.nav-item[aria-current='page'] { color: var(--white); border-bottom-color: var(--blue-60); }
+
+/* The one control that leaves the app. Styled as Carbon's primary button so it reads
+   as a destination rather than another tab. */
+.exit-button {
+    display: flex; align-items: center; height: 100%;
+    padding: 0 var(--spacing-05);
+    background: var(--blue-60); color: var(--text-on-color);
+    border: 0; cursor: pointer; font: inherit; font-size: var(--body-compact-size);
+    transition: background var(--duration-fast) var(--ease-productive);
+}
+.exit-button:hover { background: var(--blue-70); }
+
+/* --- filter bar ----------------------------------------------------------- */
+.toolbar {
+    display: flex; align-items: center; gap: var(--spacing-03); flex-wrap: wrap;
+    padding: var(--spacing-03) var(--spacing-05);
+    background: var(--layer-01); border-bottom: 1px solid var(--border-subtle);
+    flex: none;
+}
+.field {
+    height: 32px; padding: 0 var(--spacing-03);
+    background: var(--field-01); color: var(--text-primary);
+    border: 0; border-bottom: 1px solid var(--border-strong);
+    font: inherit; font-size: var(--body-compact-size);
+}
+.field:hover { background: var(--layer-hover); }
+.search-field { flex: 1 1 280px; min-width: 200px; }
+.select-field { min-width: 130px; }
+.checkbox { display: flex; align-items: center; gap: var(--spacing-02); cursor: pointer; user-select: none; }
+.count { margin-left: auto; color: var(--text-secondary); font-size: var(--label-01-size); font-variant-numeric: tabular-nums; }
+.button-ghost {
+    height: 32px; padding: 0 var(--spacing-04);
+    background: none; border: 0; cursor: pointer;
+    color: var(--link-primary); font: inherit; font-size: var(--body-compact-size);
+}
+.button-ghost:hover { background: var(--layer-hover); }
+
+/* --- Banner notification bridge ------------------------------------------- */
+.notifications { flex: none; }
+.notification {
+    display: flex; align-items: center; gap: var(--spacing-04);
+    padding: var(--spacing-04) var(--spacing-05);
+    border-left: 3px solid var(--support-info);
+    background: var(--notification-info-bg);
+    font-size: var(--body-compact-size);
+}
+.notification-error   { border-left-color: var(--support-error);   background: var(--notification-error-bg); }
+.notification-warning { border-left-color: var(--support-warning); background: var(--notification-warning-bg); }
+.notification-success { border-left-color: var(--support-success); background: var(--notification-success-bg); }
+.notification-message { flex: 1; }
+
+/* --- panes ---------------------------------------------------------------- */
+.panes { display: flex; flex: 1; min-height: 0; }
+.list-pane { flex: 1; overflow: auto; min-width: 0; }
+.detail-pane {
+    width: 340px; flex: none; overflow: auto;
+    border-left: 1px solid var(--border-subtle); background: var(--layer-01);
+    padding: var(--spacing-05);
+}
+.placeholder { color: var(--text-helper); font-size: var(--label-01-size); }
+
+/* --- data table (Carbon compact) ------------------------------------------ */
+.data-table { width: 100%; border-collapse: collapse; font-size: var(--body-compact-size); }
+.data-table th {
+    position: sticky; top: 0; z-index: 1;
+    text-align: left; font-weight: 600;
+    padding: var(--spacing-03) var(--spacing-04);
+    background: var(--gray-20); color: var(--text-primary);
+    font-size: var(--label-01-size); letter-spacing: var(--label-01-spacing);
+    white-space: nowrap;
+}
+.data-table td {
+    padding: var(--spacing-03) var(--spacing-04);
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+}
+.data-table tbody tr:hover td { background: var(--layer-hover); }
+.data-table tr[aria-selected='true'] td { background: var(--blue-10); box-shadow: inset 3px 0 0 var(--blue-60); }
+.numeric { font-variant-numeric: tabular-nums; }
+
+.course-row td {
+    background: var(--layer-01); cursor: pointer;
+    font-weight: 600; border-bottom: 1px solid var(--border-subtle);
+}
+.course-row:hover td { background: var(--layer-hover); }
+.course-code { font-family: var(--font-mono); }
+.course-title { font-weight: 400; color: var(--text-secondary); }
+.section-row td:first-child { padding-left: var(--spacing-06); }
+.child-row td:first-child { padding-left: var(--spacing-08); }
+.caret { background: none; border: 0; cursor: pointer; padding: 0 var(--spacing-02); color: var(--text-secondary); font: inherit; }
+
+/* --- status ---------------------------------------------------------------- */
+.tag {
+    display: inline-flex; align-items: center; gap: var(--spacing-02);
+    padding: 0 var(--spacing-03); height: 20px;
+    font-size: var(--label-01-size); letter-spacing: var(--label-01-spacing);
+    white-space: nowrap;
+}
+.tag-open  { background: var(--green-10); color: #0e6027; }
+.tag-low   { background: var(--yellow-10); color: var(--yellow-70); }
+.tag-full  { background: var(--red-10); color: #a2191f; }
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.dot-open { background: var(--support-success); }
+.dot-low { background: var(--support-warning); }
+.dot-full { background: var(--support-error); }
+
+.legend {
+    display: flex; gap: var(--spacing-06); align-items: center; flex-wrap: wrap;
+    padding: var(--spacing-03) var(--spacing-05);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary); font-size: var(--label-01-size);
+    flex: none;
+}
+.legend-item { display: flex; align-items: center; gap: var(--spacing-02); }
+
+/* --- inline status / loading ----------------------------------------------- */
+.status { padding: var(--spacing-05); color: var(--text-secondary); font-size: var(--body-compact-size); }
+.status-error { color: var(--support-error); }
+.loading { display: inline-flex; align-items: center; gap: var(--spacing-03); color: var(--text-secondary); font-size: var(--label-01-size); }
+.spinner {
+    width: 12px; height: 12px; flex: none;
+    border: 1.5px solid var(--gray-30); border-top-color: var(--interactive);
+    border-radius: 50%; animation: spin 700ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- detail pane ----------------------------------------------------------- */
+.detail-title { font-size: var(--heading-03-size); line-height: var(--heading-03-height); margin: 0 0 var(--spacing-02); }
+.detail-sub { color: var(--text-secondary); font-size: var(--label-01-size); margin-bottom: var(--spacing-05); }
+.detail-section { margin-bottom: var(--spacing-05); }
+.detail-label {
+    font-size: var(--label-01-size); letter-spacing: var(--label-01-spacing);
+    color: var(--text-helper); text-transform: uppercase; margin-bottom: var(--spacing-02);
+}
+.detail-body { font-size: var(--body-compact-size); }
+.detail-body p { margin: 0 0 var(--spacing-03); }
+
+/* --- route stubs ------------------------------------------------------------ */
+.route-stub { padding: var(--spacing-07); max-width: 640px; }
+.route-stub h2 { font-size: var(--heading-04-size); line-height: var(--heading-04-height); font-weight: 400; margin: 0 0 var(--spacing-05); }
+.route-stub p { color: var(--text-secondary); margin: 0 0 var(--spacing-04); }
+.route-stub code { font-family: var(--font-mono); font-size: var(--label-01-size); background: var(--layer-01); padding: 0 var(--spacing-02); }
+.route-stub ul { color: var(--text-secondary); padding-left: var(--spacing-05); margin: 0 0 var(--spacing-04); }
+.route-stub li { margin-bottom: var(--spacing-02); }

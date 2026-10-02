@@ -1,0 +1,4 @@
+node_modules/
+dist/mercedtime.js
+.idea/
+.DS_Store

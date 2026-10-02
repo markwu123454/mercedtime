@@ -1,0 +1,101 @@
+/* IBM Carbon design language, transcribed by hand rather than pulled from @carbon/react.
+   We need the tokens, not the component library: Carbon's components assume they own the
+   document, and we render into a shadow root inside someone else's page.
+
+   Carbon suits this product better than Material did — it was built for dense enterprise
+   data tables, it has a real 12px/14px type scale instead of a mobile-first one, and its
+   sharp corners and 1px rules read as "tool" rather than "app". Values below are Carbon
+   v11 White theme; keep them verbatim so they stay recognisable and easy to cross-check. */
+
+:host {
+    /* --- palette: Carbon gray ------------------------------------------------ */
+    --gray-10: #f4f4f4;
+    --gray-20: #e0e0e0;
+    --gray-30: #c6c6c6;
+    --gray-40: #a8a8a8;
+    --gray-50: #8d8d8d;
+    --gray-60: #6f6f6f;
+    --gray-70: #525252;
+    --gray-80: #393939;
+    --gray-90: #262626;
+    --gray-100: #161616;
+    --white: #ffffff;
+
+    /* --- palette: accents ---------------------------------------------------- */
+    --blue-10: #edf5ff;
+    --blue-20: #d0e2ff;
+    --blue-60: #0f62fe;
+    --blue-70: #0043ce;
+    --red-10: #fff1f1;
+    --red-60: #da1e28;
+    --green-10: #defbe6;
+    --green-50: #24a148;
+    --yellow-10: #fcf4d6;
+    --yellow-30: #f1c21b;
+    --yellow-70: #8e6a00;
+
+    /* --- semantic ------------------------------------------------------------ */
+    --background: var(--white);
+    --layer-01: var(--gray-10);
+    --layer-02: var(--white);
+    --layer-hover: #e8e8e8;
+    --layer-selected: var(--gray-20);
+    --field-01: var(--gray-10);
+    --border-subtle: var(--gray-20);
+    --border-strong: var(--gray-50);
+    --border-interactive: var(--blue-60);
+    --text-primary: var(--gray-100);
+    --text-secondary: var(--gray-70);
+    --text-helper: var(--gray-60);
+    --text-on-color: var(--white);
+    --text-disabled: var(--gray-40);
+    --link-primary: var(--blue-60);
+    --interactive: var(--blue-60);
+    --focus: var(--blue-60);
+
+    --support-error: var(--red-60);
+    --support-success: var(--green-50);
+    --support-warning: var(--yellow-30);
+    --support-info: var(--blue-70);
+    --notification-error-bg: var(--red-10);
+    --notification-success-bg: var(--green-10);
+    --notification-warning-bg: var(--yellow-10);
+    --notification-info-bg: var(--blue-10);
+
+    /* --- spacing: Carbon's 01–09 scale --------------------------------------- */
+    --spacing-01: 2px;
+    --spacing-02: 4px;
+    --spacing-03: 8px;
+    --spacing-04: 12px;
+    --spacing-05: 16px;
+    --spacing-06: 24px;
+    --spacing-07: 32px;
+    --spacing-08: 40px;
+    --spacing-09: 48px;
+
+    /* --- type ---------------------------------------------------------------- */
+    /* IBM Plex is not loadable here — a content script cannot reliably add a font
+       stylesheet to a host page under its CSP — so this is Plex-if-installed with a
+       stack chosen to keep the same metrics feel. */
+    --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+    --label-01-size: 12px;
+    --label-01-height: 16px;
+    --label-01-spacing: 0.32px;
+    --body-compact-size: 14px;
+    --body-compact-height: 18px;
+    --body-compact-spacing: 0.16px;
+    --heading-03-size: 20px;
+    --heading-03-height: 28px;
+    --heading-04-size: 28px;
+    --heading-04-height: 36px;
+
+    /* --- motion: Carbon's productive easing ---------------------------------- */
+    --duration-fast: 70ms;
+    --duration-moderate: 110ms;
+    --ease-productive: cubic-bezier(0.2, 0, 0.38, 0.9);
+
+    /* Carbon is square. No radius token exists on purpose. */
+    --layer-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
