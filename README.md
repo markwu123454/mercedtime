@@ -21,8 +21,8 @@ npm install
 npm run build      # or: npm run watch
 ```
 
-Load `dist/` as an unpacked extension. The extension redirects
-`/ssb/registration` (the Banner menu) to its own page (`dist/app.html`); no content script
+Load `dist/` as an unpacked extension. A service worker redirects
+`/ssb/registration` (the Banner menu) to its own page (`dist/app.html`) with `webNavigation`; no content script
 runs on Banner pages.
 
 ## Layout
