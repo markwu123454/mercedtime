@@ -9,7 +9,7 @@ import tokensCSS from './styles/tokens.css?inline';
 import appCSS from './styles/app.css?inline';
 
 // This is the extension's own page (app.html). The redirect rule in rules.json sends
-// /ssb/courseSearch/courseSearch here, so nothing from Banner is on the page and there
+// /ssb/registration here, so nothing from Banner is on the page and there
 // is no host DOM to read or hide.
 const host = document.createElement('div');
 host.id = 'mercedtime-root';

@@ -22,7 +22,7 @@ npm run build      # or: npm run watch
 ```
 
 Load `dist/` as an unpacked extension. The extension redirects
-`/ssb/courseSearch/courseSearch` to its own page (`dist/app.html`); no content script
+`/ssb/registration` (the Banner menu) to its own page (`dist/app.html`); no content script
 runs on Banner pages.
 
 ## Layout
