@@ -305,3 +305,23 @@ a.button-ghost { display: inline-flex; align-items: center; text-decoration: non
 .curriculum dt { color: var(--text-helper); }
 .curriculum dd { margin: 0; }
 .window-past { text-decoration: line-through; color: var(--text-helper); }
+
+/* --- degree audit ---------------------------------------------------------------- */
+.tabs-row { display: flex; gap: var(--spacing-02); margin: var(--spacing-05) 0 var(--spacing-03); border-bottom: 1px solid var(--border-subtle); }
+.tab-button { background: none; border: 0; border-bottom: 3px solid transparent; padding: var(--spacing-03) var(--spacing-05); cursor: pointer; font: inherit; color: var(--text-secondary); }
+.tab-button.on { color: var(--text-primary); border-bottom-color: var(--blue-60); }
+.degree-summary, .requirement-card { margin: 0 var(--spacing-05) var(--spacing-05); }
+.degree-bar { position: relative; height: 12px; background: var(--gray-20); margin-bottom: var(--spacing-03); }
+.degree-bar-done { position: absolute; inset: 0 auto 0 0; background: var(--blue-60); }
+.degree-bar-plan { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--blue-40, #78a9ff), var(--blue-40, #78a9ff) 4px, var(--blue-20, #d0e2ff) 4px, var(--blue-20, #d0e2ff) 8px); }
+.req-head { display: flex; flex-wrap: wrap; gap: var(--spacing-04); align-items: center; margin-bottom: var(--spacing-03); }
+.req-title { font-size: var(--heading-03-size); font-weight: 400; margin: 0; }
+.sub-row { border-top: 1px solid var(--border-subtle); padding: var(--spacing-03) 0; }
+.sub-head { display: flex; gap: var(--spacing-03); align-items: center; margin-bottom: var(--spacing-02); }
+.applied { display: flex; flex-wrap: wrap; gap: var(--spacing-02); align-items: center; margin: var(--spacing-02) 0; }
+.chip-course { font-family: var(--font-mono); }
+.chip-ip { background: var(--yellow-10); }
+.chip-option { border: 0; cursor: pointer; background: var(--blue-10); color: var(--blue-70); font: inherit; font-family: var(--font-mono); font-size: var(--label-01-size); padding: 0 var(--spacing-03); height: 22px; }
+.chip-option:hover:not(:disabled) { background: var(--blue-20, #d0e2ff); }
+.chip-planned { background: var(--green-10); color: #0e6027; cursor: default; }
+.planned-hit { margin: var(--spacing-02) 0; color: #0e6027; }

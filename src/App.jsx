@@ -6,6 +6,7 @@ import Home from './routes/Home.jsx';
 import Search from './routes/Search.jsx';
 import Schedule from './routes/Schedule.jsx';
 import PlanSchedule from './routes/PlanSchedule.jsx';
+import Degree from './routes/Degree.jsx';
 import Standing from './routes/Standing.jsx';
 import Plan from './routes/Plan.jsx';
 import History from './routes/History.jsx';
@@ -31,6 +32,7 @@ const TABS = [
     ['search', 'Find classes'],
     ['plan', 'Plan'],
     ['schedule', 'Schedule'],
+    ['degree', 'Degree'],
     ['standing', 'Standing'],
     ['history', 'Record'],
 ];
@@ -70,6 +72,7 @@ export default function App() {
             {route === 'search' ? <Search />
                 : route === 'plan' ? (args[0] === 'schedule' ? <PlanSchedule term={args[1]} /> : <Plan />)
                 : route === 'schedule' ? <Schedule />
+                : route === 'degree' ? <Degree />
                 : route === 'standing' ? <Standing />
                 : route === 'history' ? <History />
                 : <Home />}

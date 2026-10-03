@@ -37,6 +37,8 @@ src/
   lib/sections.js     pure Banner data logic — bundles, seats, tiers, search ranking
   lib/banner.js       parses Banner's server-rendered status HTML
   lib/store.js        shared state, plan persistence, and the catalog downloader
+  lib/audit.js        reads the uAchieve degree audit (HTML) from the student's session
+  lib/degree.js       audit logic: ids, course keys, what a plan would meet
   lib/cache.js        IndexedDB store for downloaded terms (survives restarts)
   lib/courses.js      course options for a term from earlier terms of its season
   routes/             Home, Search, Plan, Schedule (built); Standing / History (stubs)

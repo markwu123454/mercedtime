@@ -7,6 +7,7 @@ import { useSyncExternalStore } from 'react';
 import * as api from './api.js';
 import { courseKey } from './sections.js';
 import * as cache from './cache.js';
+import * as auditApi from './audit.js';
 import { courseList, termLabel } from './courses.js';
 import { byCourse } from './generate.js';
 import { DEFAULT_SETTINGS } from './schedule.js';
@@ -16,6 +17,7 @@ import { parsePrepareRegistration } from './banner.js';
 const PLAN_KEY = 'mercedtime_plan_v2';
 const TERM_KEY = 'mercedtime_term';
 const SETTINGS_KEY = 'mercedtime_settings';
+const DEGREE_KEY = 'mercedtime_degree';
 
 let state = {
     route: 'home',          // which tab is showing; decides which term's catalog loads
@@ -40,6 +42,9 @@ let state = {
     home: { status: 'idle', error: null, currentTerm: null, nextTerm: null, activeRows: [] },
     tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', page } }; page is parsePrepareRegistration's result, or null
     settings: DEFAULT_SETTINGS,
+    // The degree audit from uAchieve: { status: 'idle' | 'loading' | 'ok' | 'signed-out' | 'error',
+    // audit, history, meta: { seq, href, fetchedAt }, error, running }
+    degree: { status: 'idle', audit: null, history: [], meta: null, error: null, running: false },
     discovery: { status: 'idle', checked: 0 },
     cacheMeta: {},          // { [term]: { fetchedAt, count } } for every downloaded catalog
     courseIndex: {},        // { [term]: [[key, subject, number, title]] } for every downloaded catalog
@@ -585,6 +590,47 @@ export async function loadTicket(term, { force = false } = {}) {
 export const setTicketOverride = (term, ms) => updateSettings({
     ticketOverride: { ...(state.settings.ticketOverride || {}), [term]: ms },
 });
+
+// --- degree audit ---------------------------------------------------------------------
+
+/** Read the newest saved audit from uAchieve. The last one read is shown straight away and
+ *  kept on disk; the report itself is only fetched again when a newer audit exists (or on
+ *  `force`), so this never creates an audit. */
+export async function loadDegree({ force = false } = {}) {
+    if (state.degree.status === 'loading') return;
+    if (!state.degree.audit) {
+        const saved = (await chrome.storage.local.get(DEGREE_KEY))[DEGREE_KEY];
+        if (saved) set({ degree: { ...state.degree, ...saved } });
+    }
+    set({ degree: { ...state.degree, status: 'loading', error: null } });
+    try {
+        const latest = (await auditApi.fetchAuditList()).completed[0];
+        if (!latest) { set({ degree: { ...state.degree, status: 'ok', audit: null, meta: null } }); return; }
+        if (!force && state.degree.audit && state.degree.meta?.seq === latest.seq) {
+            set({ degree: { ...state.degree, status: 'ok' } });
+            return;
+        }
+        const audit = await auditApi.fetchAudit(latest.href);
+        const history = audit.historyHref ? await auditApi.fetchCourseHistory(audit.historyHref).catch(() => []) : [];
+        const next = { audit, history, meta: { seq: latest.seq, href: latest.href, fetchedAt: Date.now() } };
+        set({ degree: { ...state.degree, ...next, status: 'ok', error: null } });
+        await chrome.storage.local.set({ [DEGREE_KEY]: next });
+    } catch (e) {
+        set({ degree: { ...state.degree, status: e.name === 'AuditSessionError' ? 'signed-out' : 'error', error: e.message } });
+    }
+}
+
+/** Run a new audit on uAchieve (it adds one to the student's saved list), then read it. */
+export async function runNewAudit() {
+    set({ degree: { ...state.degree, running: true, error: null } });
+    try {
+        await auditApi.runAudit();
+        set({ degree: { ...state.degree, running: false } });
+        await loadDegree({ force: true });
+    } catch (e) {
+        set({ degree: { ...state.degree, running: false, status: e.name === 'AuditSessionError' ? 'signed-out' : 'error', error: e.message } });
+    }
+}
 
 // --- boot --------------------------------------------------------------------
 
