@@ -111,8 +111,12 @@ export const getOpenTerms = ({ max = 10 } = {}) =>
 const PAGE_SIZE = 50;
 
 /** One page of a term's sections, starting at `offset`. The term itself comes from
- *  session state (saveTerm), not from this call. Returns { rows, total }; an empty
- *  `rows` means there is nothing at that offset. */
+ *  session state (saveTerm), not from this call.
+ *
+ *  Returns { ok, rows, total }. `ok` is false when Banner did not report success, which
+ *  is a failed page and not the end of the list. `total` is Banner's own count, or null
+ *  when it did not send one. An empty `rows` with ok true is only the end if `total`
+ *  says so: a session that has lost its term also answers success with nothing. */
 export async function searchPage(term, offset) {
     // txt_term is ignored by the server — the term comes from session state set by
     // saveTerm() above. Sent anyway because Banner's own client sends it, so we
@@ -124,8 +128,8 @@ export async function searchPage(term, offset) {
         sortColumn: 'subjectDescription',
         sortDirection: 'asc',
     })}`);
-    if (!data?.success || !data.data?.length) return { rows: [], total: data?.totalCount ?? 0 };
-    return { rows: data.data, total: data.totalCount ?? offset + data.data.length };
+    if (!data?.success) return { ok: false, rows: [], total: null };
+    return { ok: true, rows: data.data || [], total: data.totalCount ?? null };
 }
 
 // These answer with HTML fragments, not JSON, and are fetched lazily per section.

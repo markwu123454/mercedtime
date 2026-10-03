@@ -168,6 +168,11 @@ const BG_PAGE_DELAY_MS = 250;              // background downloads go gently
 const EMPTY_RETRY_MS = 30 * 60 * 1000;     // how long before asking again about a term with no classes
 const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const REFRESH_RESTART_MS = 3 * 60 * 1000;  // an abandoned seat refresh this old starts over
+const PAGE_RETRIES = 3;                    // a page that fails is asked for again this many times
+
+/** Delays that tests shorten. retryMs: before a download that gave up tries again, from
+ *  where it stopped. backoffMs: base wait between attempts at a failing page. */
+export const tuning = { retryMs: 60 * 1000, backoffMs: 500 };
 
 const loads = new Map();     // `${mode}:${term}` -> { mode, term, rows, offset, total, failed, waiters, ... }
 const emptyAt = new Map();   // term -> when Banner last answered with no classes for it
@@ -193,10 +198,14 @@ const viewingSeats = () => state.route === 'search' || state.route === 'plan';
 const entry = (mode, term) => {
     const key = `${mode}:${term}`;
     if (!loads.has(key)) {
-        loads.set(key, { mode, term, rows: [], offset: 0, total: 0, failed: false, waiters: [], init: false, pages: 0, startedAt: Date.now() });
+        loads.set(key, { mode, term, rows: [], offset: 0, total: 0, failedAt: 0, retries: 0, waiters: [], init: false, pages: 0, startedAt: Date.now() });
     }
     return loads.get(key);
 };
+
+/** A download that gave up is left alone for a while, then picked up again from where it
+ *  stopped. Giving up is never final. */
+const resting = (l) => !!l && l.failedAt && Date.now() - l.failedAt < tuning.retryMs;
 
 /** Bring a saved catalog into memory. */
 function hydrate(term) {
@@ -218,7 +227,7 @@ function bgCandidates() {
     const planned = Object.keys(state.planAll).filter((t) => Object.keys(state.planAll[t] || {}).length);
     const now = Date.now();
     return [...new Set([...planned, ...(state.settings.extraTerms || []), ...desc.slice(0, state.settings.keepTerms)])]
-        .filter((t) => isListed(t) && !isCached(t) && !loads.get(`full:${t}`)?.failed
+        .filter((t) => isListed(t) && !isCached(t) && !resting(loads.get(`full:${t}`))
             && !(emptyAt.has(t) && now - emptyAt.get(t) < EMPTY_RETRY_MS));
 }
 
@@ -226,8 +235,8 @@ function pickJob() {
     const fg = wantedTerm();
     if (fg && isListed(fg)) {
         const full = loads.get(`full:${fg}`);
-        if (full && !full.failed && !inMemory(fg) && !isCached(fg)) return { term: fg, mode: 'full', bg: false };
-        if (viewingSeats() && fg === state.term && isCached(fg) && !loads.get(`refresh:${fg}`)?.failed
+        if (full && !resting(full) && !inMemory(fg) && !isCached(fg)) return { term: fg, mode: 'full', bg: false };
+        if (viewingSeats() && fg === state.term && isCached(fg) && !resting(loads.get(`refresh:${fg}`))
             && (forced.has(fg) || Date.now() - state.cacheMeta[fg].fetchedAt > SEAT_TTL_MS)) {
             return { term: fg, mode: 'refresh', bg: false };
         }
@@ -238,23 +247,31 @@ function pickJob() {
 
 const dedupe = (rows) => [...new Map(rows.map((r) => [r.courseReferenceNumber, r])).values()];
 
-async function saveCatalog(term, rows) {
+async function saveCatalog(term, rows, total) {
     const fetchedAt = Date.now();
-    await cache.putCatalog(term, rows, fetchedAt);
+    await cache.putCatalog(term, rows, fetchedAt, total);
     const list = courseList(rows);
     cache.putCourses(term, list);
     set({
-        cacheMeta: { ...state.cacheMeta, [term]: { fetchedAt, count: rows.length } },
+        cacheMeta: { ...state.cacheMeta, [term]: { fetchedAt, count: rows.length, total } },
         courseIndex: { ...state.courseIndex, [term]: list },
     });
 }
 
+/** Fetch the next page of a download. Returns true when the term is complete.
+ *
+ *  A page counts only if it is good: Banner reported success, the rows belong to this
+ *  term, and an empty page only ends the list when Banner's own total says the list is
+ *  over. Anything else (a failed page, rows from another term because something else
+ *  changed the session's term, an empty page part way through) throws, and the caller
+ *  asks again with the term committed afresh. Treating those as "the end" is what used to
+ *  save half a term as if it were the whole thing. */
 async function stepPage(l, bg) {
     if (l.mode === 'full' && !l.init) {
         l.init = true;
         const part = await cache.getPartial(l.term);
         if (part && !l.rows.length && Date.now() - part.savedAt < PARTIAL_MAX_AGE_MS) {
-            l.rows = part.rows; l.offset = part.offset; l.total = part.total;     // resume an earlier download
+            l.rows = part.rows; l.offset = part.offset; l.total = part.total || 0;     // resume an earlier download
         }
     }
     if (bg) await sleep(BG_PAGE_DELAY_MS);
@@ -263,20 +280,34 @@ async function stepPage(l, bg) {
         await api.saveTerm(l.term);
         committed = l.term;
     }
-    const { rows, total } = await api.searchPage(l.term, l.offset);
-    l.rows.push(...rows);
-    l.offset += rows.length;
-    l.total = total || l.rows.length;
-    l.pages++;
+    const res = await api.searchPage(l.term, l.offset);
+    if (!res.ok) throw new Error('Banner did not return the next page');
+    if (res.rows.some((r) => r.term && String(r.term) !== String(l.term))) {
+        committed = null;
+        throw new Error('Banner returned another term; the session lost this one');
+    }
+    if (res.total != null) l.total = res.total;
 
-    if (l.mode === 'full' && state.term === l.term) set({ sections: [...l.rows], loadingText: `Loading… ${l.offset} / ${l.total}` });
-    if (l.mode === 'full' && l.pages % 5 === 0) cache.putPartial(l.term, { rows: l.rows, offset: l.offset, total: l.total });
+    if (!res.rows.length) {
+        if (l.total > 0 && l.offset < l.total) {
+            committed = null;
+            throw new Error(`Banner returned an empty page at ${l.offset} of ${l.total}`);
+        }
+        return true;                                  // nothing here, and Banner agrees the list is over
+    }
+    l.rows.push(...res.rows);
+    l.offset += res.rows.length;
+    l.pages++;
+    l.retries = 0;
+
+    if (l.mode === 'full' && state.term === l.term) set({ sections: [...l.rows], loadingText: `Loading… ${l.offset} / ${l.total || '?'}` });
+    if (l.mode === 'full' && l.pages % 3 === 0) cache.putPartial(l.term, { rows: l.rows, offset: l.offset, total: l.total });
     // Progress for the status line, at most a few times a second.
     if (Date.now() - lastProgress > 700) {
         lastProgress = Date.now();
         set({ downloads: { status: 'running', term: l.term, mode: l.mode, bg, loaded: l.offset, total: l.total } });
     }
-    return !rows.length || l.offset >= l.total;
+    return l.total > 0 ? l.offset >= l.total : false;
 }
 
 async function finish(l) {
@@ -293,11 +324,13 @@ async function finish(l) {
             l.waiters.forEach((w) => w.resolve([]));
             return;
         }
-        await saveCatalog(term, rows);
+        await saveCatalog(term, rows, l.total || rows.length);
         // Memory only for what is being used; a background download is saved and dropped.
         if (l.waiters.length || term === state.term || term === wantedTerm()) {
             set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: rows } });
         }
+        // A download that gave up and later finished on its own: bring the page up to date.
+        if (term === state.term) set({ sections: rows, loading: false, loadingText: '', error: null });
         l.waiters.forEach((w) => w.resolve(rows));
         return;
     }
@@ -305,7 +338,7 @@ async function finish(l) {
     // refresh: newer rows replace their saved copies; classes new since the download are added
     const base = state.sectionsByTerm[term] || (await cache.getCatalog(term))?.rows || [];
     const merged = dedupe([...base, ...l.rows]);
-    await saveCatalog(term, merged);
+    await saveCatalog(term, merged, Math.max(l.total, merged.length));
     forced.delete(term);
     if (inMemory(term)) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: merged } });
     if (state.term === term) set({ sections: merged });
@@ -326,9 +359,15 @@ async function runLoader() {
             try {
                 if (await stepPage(l, job.bg)) await finish(l);
             } catch (e) {
-                l.failed = true;
+                // Ask for the same page again a few times; the loop will pick this job up
+                // again where it left off. After that, give up for a while (never for good).
+                if (l.mode === 'full') cache.putPartial(l.term, { rows: l.rows, offset: l.offset, total: l.total });
+                if (++l.retries <= PAGE_RETRIES) { await sleep(tuning.backoffMs * 2 ** (l.retries - 1)); continue; }
+                l.retries = 0;
+                l.failedAt = Date.now();
                 l.waiters.splice(0).forEach((w) => w.reject(e));
                 set({ downloads: { status: 'idle', term: null, mode: null, bg: false, loaded: 0, total: 0 } });
+                setTimeout(refocus, tuning.retryMs + 50);
             }
         }
     } finally {
@@ -354,7 +393,8 @@ export async function loadSections(term) {
     if (!isListed(term)) return [];            // a semester Banner does not list yet has nothing to fetch
     emptyAt.delete(term);                      // asking again is a retry
     const l = entry('full', term);
-    l.failed = false;
+    l.failedAt = 0;
+    l.retries = 0;
     const p = new Promise((resolve, reject) => l.waiters.push({ resolve, reject }));
     refocus();
     return p;
@@ -363,7 +403,7 @@ export async function loadSections(term) {
 /** Re-read seat numbers for a term now, instead of waiting for them to go stale. */
 export function refreshSeats(term = state.term) {
     forced.add(term);
-    loads.delete(`refresh:${term}`);
+    loads.delete(`refresh:${term}`);     // also clears a refresh that gave up
     refocus();
 }
 
@@ -395,10 +435,17 @@ export async function selectTerm(term) {
 }
 
 /** Saved catalogs and course lists, read at startup (the rows themselves load on use). */
-async function hydrateCacheMeta() {
-    const [meta, courses] = await Promise.all([cache.listMeta(), cache.allCourses()]);
+export async function hydrateCacheMeta() {
+    const [all, courses] = await Promise.all([cache.listMeta(), cache.allCourses()]);
+    // A saved catalog with fewer sections than Banner said it has, or saved before totals
+    // were recorded, may be a download that ended early. It is dropped and fetched again.
+    const meta = [];
+    for (const m of all) {
+        if (m.total && m.count >= m.total) meta.push(m);
+        else cache.dropCatalog(m.term);
+    }
     set({
-        cacheMeta: Object.fromEntries(meta.map((m) => [m.term, { fetchedAt: m.fetchedAt, count: m.count }])),
+        cacheMeta: Object.fromEntries(meta.map((m) => [m.term, { fetchedAt: m.fetchedAt, count: m.count, total: m.total }])),
         courseIndex: Object.fromEntries(courses.map((c) => [c.term, c.list])),
     });
 }

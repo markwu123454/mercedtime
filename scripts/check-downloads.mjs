@@ -25,6 +25,10 @@ globalThis.fetch = async (url, init = {}) => {
         const off = Number(u.searchParams.get('pageOffset'));
         log.push(`${session}@${off}`);
         const rows = DATA[session] || [];
+        const fault = globalThis.flaky?.(session, off);
+        if (fault === 'fail') return json({ success: false });
+        if (fault === 'empty') return json({ success: true, totalCount: rows.length, data: [] });
+        if (fault === 'wrong') return json({ success: true, totalCount: rows.length, data: mk('202610', 50, 1) });
         return json({ success: true, totalCount: rows.length, data: rows.slice(off, off + 50) });
     }
     throw new Error(`unexpected ${path}`);
@@ -103,6 +107,48 @@ assert.equal(courseOptions('202710', idx).source, 'history');
 const n = log.length;
 assert.deepEqual(await store.loadSections('203330'), []);
 assert.equal(log.length, n);
+
+
+// --- interruptions: a download that is disturbed must finish, not stop part way --------------
+store.tuning.backoffMs = 1;
+store.tuning.retryMs = 60;
+const faults = { '202440': ['fail'], '202430': ['empty'], '202420': ['wrong'], '202410': ['fail', 'fail', 'fail', 'fail'] };
+const seenAt = {};      // `${term}@${offset}` -> how many requests it took
+globalThis.flaky = (term, off) => {
+    const k = `${term}@${off}`;
+    seenAt[k] = (seenAt[k] || 0) + 1;
+    if (off !== 50) return null;                         // only the second page misbehaves
+    const plan = faults[term];
+    return plan && seenAt[k] <= plan.length ? plan[seenAt[k] - 1] : null;
+};
+for (const t of ['202440', '202430', '202420', '202410', '202400']) DATA[t] = mk(t, t === '202430' ? 130 : 100, 1);
+cache.putPartial('202400', { rows: DATA['202400'].slice(0, 50), offset: 50, total: 100 });   // an earlier session got this far
+
+store.set({
+    terms: [...S().terms, ...['202440', '202430', '202420', '202410', '202400'].map((c) => ({ code: c, description: c }))],
+});
+await store.updateSettings({ backgroundDownload: true, keepTerms: 20 });
+await until(() => ['202440', '202430', '202420', '202410', '202400'].every((t) => S().cacheMeta[t]), 8000);
+
+for (const t of ['202440', '202430', '202420', '202410', '202400']) {
+    const cat = await cache.getCatalog(t);
+    assert.equal(cat.rows.length, DATA[t].length, `${t} was saved complete, not cut short`);
+    assert.equal(cat.total, DATA[t].length, `${t} records the total Banner reported`);
+    assert.equal(new Set(cat.rows.map((r) => r.courseReferenceNumber)).size, cat.rows.length, `${t} has no duplicate rows`);
+    assert.ok(cat.rows.every((r) => r.term === t), `${t} holds only its own rows`);
+}
+assert.ok(seenAt['202410@50'] > 4, 'a download that gave up tried again later');
+assert.equal(seenAt['202410@0'], 1, 'and resumed where it stopped instead of starting over');
+assert.equal(seenAt['202400@0'], undefined, 'a partial from an earlier session is resumed, not restarted');
+
+// a catalog saved short of Banner's total, or without one, is not trusted
+await cache.putCatalog('202390', DATA['202400'].slice(0, 40), Date.now(), 90);
+await cache.putCatalog('202380', DATA['202400'].slice(0, 40), Date.now(), 0);
+await store.hydrateCacheMeta();
+await sleep(20);
+assert.ok(!S().cacheMeta['202390'] && !S().cacheMeta['202380'], 'unfinished catalogs are dropped from the saved list');
+assert.equal(await cache.getCatalog('202390'), undefined);
+globalThis.flaky = undefined;
 
 console.log('ok (downloads)');
 process.exit(0);

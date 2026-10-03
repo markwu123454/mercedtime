@@ -61,10 +61,13 @@ async function all(store) {
 
 export const getCatalog = (term) => get('catalogs', term);
 
-export async function putCatalog(term, rows, fetchedAt = Date.now()) {
-    await put('catalogs', { term, rows, fetchedAt });
-    await put('meta', { term, fetchedAt, count: rows.length });
+/** `total` is how many sections Banner said the term has. It is stored so a catalog that
+ *  holds fewer is recognised as unfinished instead of trusted. */
+export async function putCatalog(term, rows, fetchedAt = Date.now(), total = rows.length) {
+    await put('catalogs', { term, rows, fetchedAt, total });
+    await put('meta', { term, fetchedAt, count: rows.length, total });
 }
+export const dropCatalog = async (term) => { await del('catalogs', term); await del('meta', term); };
 
 export const listMeta = () => all('meta');
 export const getPartial = (term) => get('partials', term);
