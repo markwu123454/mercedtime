@@ -600,7 +600,8 @@ export async function loadDegree({ force = false } = {}) {
     if (state.degree.status === 'loading') return;
     if (!state.degree.audit) {
         const saved = (await chrome.storage.local.get(DEGREE_KEY))[DEGREE_KEY];
-        if (saved) set({ degree: { ...state.degree, ...saved } });
+        // A copy read by an older parser is dropped, so the audit is read again below.
+        if (saved && saved.parserVersion === auditApi.PARSER_VERSION) set({ degree: { ...state.degree, ...saved } });
     }
     set({ degree: { ...state.degree, status: 'loading', error: null } });
     try {
@@ -612,7 +613,7 @@ export async function loadDegree({ force = false } = {}) {
         }
         const audit = await auditApi.fetchAudit(latest.href);
         const history = audit.historyHref ? await auditApi.fetchCourseHistory(audit.historyHref).catch(() => []) : [];
-        const next = { audit, history, meta: { seq: latest.seq, href: latest.href, fetchedAt: Date.now() } };
+        const next = { audit, history, parserVersion: auditApi.PARSER_VERSION, meta: { seq: latest.seq, href: latest.href, fetchedAt: Date.now() } };
         set({ degree: { ...state.degree, ...next, status: 'ok', error: null } });
         await chrome.storage.local.set({ [DEGREE_KEY]: next });
     } catch (e) {

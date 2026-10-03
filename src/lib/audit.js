@@ -8,9 +8,13 @@
 // fails soft: anything not found comes back empty, never as a thrown error. Only a signed-out
 // session throws, as AuditSessionError.
 
-import { auditIdFromHref, splitHeading } from './degree.js';
+import { auditIdFromHref, dedupeRequirements, splitHeading } from './degree.js';
 
 export const AUDIT_BASE = 'https://ucmerced.uachieve.com/selfservice';
+
+/** Bumped whenever parseAudit's output changes. The audit read last is kept on disk and reused
+ *  while uAchieve has nothing newer, so a copy parsed by an older parser has to be read again. */
+export const PARSER_VERSION = 3;
 
 export class AuditSessionError extends Error {
     constructor() { super('uAchieve session ended'); this.name = 'AuditSessionError'; }
@@ -83,6 +87,9 @@ export function parseAuditList(html) {
 
 const status = (el, re) => (String(el?.className || '').match(re) || [])[1] || 'NONE';
 
+// Containers the page does not show.
+const HIDDEN = '[hidden], [aria-hidden="true"], .hidden, .hide, .print-only, .printOnly, .noscreen, [style*="display:none"], [style*="display: none"]';
+
 /** Elements of `selector` that belong to `node` itself, not to a sub-requirement inside it. */
 function own(node, selector) {
     const isSub = node.classList.contains('subrequirement');
@@ -140,6 +147,7 @@ export function parseAudit(html) {
     // requirement before it, whether the markup nests it or lists it beside it.
     const requirements = [];
     for (const el of doc.querySelectorAll('.requirement, .subrequirement')) {
+        if (el.closest(HIDDEN)) continue;                    // a hidden print or mobile copy of the report
         if (el.classList.contains('requirement')) {
             const totals = el.querySelector('table.requirementTotals tr.reqNeeds');
             requirements.push({
@@ -163,7 +171,7 @@ export function parseAudit(html) {
             });
         }
     }
-    return { header, historyHref, requirements };
+    return { header, historyHref, requirements: dedupeRequirements(requirements) };
 }
 
 // --- course history ------------------------------------------------------------------------

@@ -56,6 +56,19 @@ export function plannedCourses(planAll) {
         Object.values(items || {}).map((i) => ({ key: i.key, subject: i.subject, number: i.number, term })));
 }
 
+/** Remove requirements that repeat an earlier one exactly: same name, wording, status, courses,
+ *  options and sub-requirements. A report page can hold its content twice (a hidden print or mobile
+ *  copy), and every extra copy would double the requirements and compete for the same planned
+ *  courses. The first occurrence stays. */
+export function dedupeRequirements(requirements) {
+    const sig = (r) => JSON.stringify([
+        r.name, r.title, r.description, r.status, r.needs, r.options, r.courses,
+        r.subs.map((s) => [s.title, s.description, s.status, s.earned, s.inProgress, s.options, s.courses]),
+    ]);
+    const seen = new Set();
+    return requirements.filter((r) => { const k = sig(r); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 // OK is met; IP is met once the in-progress courses finish. Neither needs another course.
 const needsCourse = (status) => status !== 'OK' && status !== 'IP';
 

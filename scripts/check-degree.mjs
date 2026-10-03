@@ -2,7 +2,7 @@
 // does to an audit's open requirements. (The HTML parsers need a browser; see
 // fixtures/uachieve/README.md.) Run: npm run check
 import assert from 'node:assert/strict';
-import { auditIdFromHref, courseKeyOf, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, splitHeading, unmetNodes } from '../src/lib/degree.js';
+import { auditIdFromHref, courseKeyOf, dedupeRequirements, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, splitHeading, unmetNodes } from '../src/lib/degree.js';
 
 assert.equal(normalizeNumber('10H'), '010H');
 assert.equal(normalizeNumber('010h'), '010H');
@@ -72,5 +72,15 @@ assert.equal(r.completes[1], true, 'both open GE requirements are covered');
 r = simulatePlan(audit, [{ key: 'CSE030', subject: 'CSE', number: '030', term: 'a' }]);
 assert.deepEqual(r.spare.map((p) => p.key), ['CSE030']);
 assert.equal(Object.keys(r.assigned).length, 0);
+
+// a report that lists everything twice must not double the requirements
+const once = audit.requirements;
+const twice = dedupeRequirements([...once, ...once]);
+assert.equal(twice.length, once.length, 'an exact repeat of the whole list is dropped');
+assert.deepEqual(twice.map((r) => r.title), once.map((r) => r.title), 'and the first copy stays, in order');
+const same = { name: 'X', title: 'Same title', description: '', status: 'NO', needs: {}, options: opt('ART010'), courses: [], subs: [] };
+assert.equal(dedupeRequirements([same, { ...same, options: opt('ART020') }]).length, 2, 'same title with different options is a different requirement');
+const dbl = simulatePlan({ requirements: twice }, planned);
+assert.equal(Object.keys(dbl.assigned).length, Object.keys(simulatePlan(audit, planned).assigned).length, 'planned courses are counted once');
 
 console.log('ok (degree)');
