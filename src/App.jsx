@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from './lib/store.js';
 import { BASE } from './lib/api.js';
+import { SIGN_IN_URL, beginSignIn } from './lib/signin.js';
 import Home from './routes/Home.jsx';
 import Search from './routes/Search.jsx';
 import Schedule from './routes/Schedule.jsx';
@@ -44,7 +45,10 @@ export default function App() {
                     ))}
                 </nav>
                 <span className="masthead-spacer" />
-                <span className="masthead-user">{auth === 'in' ? 'Signed in' : 'Not signed in'}</span>
+                {auth === 'in'
+                    ? <span className="masthead-user">Signed in</span>
+                    : <a className="masthead-user masthead-link" href={SIGN_IN_URL} onClick={beginSignIn}
+                         title="Sign in to Banner, then come back here">Not signed in</a>}
                 {/* The one control that leaves the app. Banner owns add/drop; we never do. */}
                 <a className="exit-button"
                    href={`${BASE}/term/termSelection?mode=registration`}>

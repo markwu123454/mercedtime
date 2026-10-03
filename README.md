@@ -24,7 +24,8 @@ npm run check      # offline checks of the schedule maths
 
 Load `dist/` as an unpacked extension. A service worker redirects
 `/ssb/registration` (the Banner menu) to its own page (`dist/app.html`) with `webNavigation`; no content script
-runs on Banner pages.
+runs on Banner pages. The "Not signed in" link sends the tab through Banner's login and
+the service worker returns it to the app once it lands back on Banner.
 
 ## Layout
 

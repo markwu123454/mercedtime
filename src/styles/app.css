@@ -240,3 +240,5 @@ input[type='number'].field { width: 90px; }
 .plan-state { margin-left: auto; display: flex; gap: var(--spacing-02); flex-wrap: wrap; }
 .chip { background: var(--gray-20); padding: 0 var(--spacing-03); font-size: var(--label-01-size); font-family: var(--font-mono); }
 .inline-form .field { width: 260px; }
+.masthead-link { text-decoration: underline; cursor: pointer; }
+.masthead-link:hover { color: var(--white); }

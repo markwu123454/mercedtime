@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, setTicketOverride } from '../lib/store.js';
-import { BASE } from '../lib/api.js';
+import { SIGN_IN_URL, beginSignIn } from '../lib/signin.js';
 import { buildBlocks, scheduleSvg } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { shortType } from '../lib/schedule.js';
@@ -17,7 +17,7 @@ export default function Home() {
             {home.error === 'signed-out' && (
                 <div className="status status-error home-banner">
                     Sign in to Banner to see your schedule and registration time.{' '}
-                    <a href={`${BASE}/term/termSelection?mode=preReg`}>Sign in &rarr;</a>
+                    <a href={SIGN_IN_URL} onClick={beginSignIn}>Sign in &rarr;</a>
                 </div>
             )}
             <div className="home-grid">
