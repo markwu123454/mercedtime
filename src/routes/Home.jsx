@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { useStore, setTicketOverride } from '../lib/store.js';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useStore, setTicketOverride, loadHome } from '../lib/store.js';
 import { SIGN_IN_URL, beginSignIn } from '../lib/signin.js';
 import { buildBlocks, scheduleSvg } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
@@ -12,12 +12,24 @@ export default function Home() {
     const { home, terms, sectionsByTerm, settings, planAll, tickets } = useStore((s) => s);
     const { currentTerm, nextTerm, activeRows } = home;
 
+    // Coming back to Home with nothing loaded (an earlier attempt failed or found
+    // nothing) tries again. First load is started by boot(), so 'idle' does nothing.
+    useEffect(() => {
+        if (home.status === 'error' || (home.status === 'ok' && !home.activeRows.length)) loadHome();
+    }, []);
+
     return (
         <div className="home">
             {home.error === 'signed-out' && (
                 <div className="status status-error home-banner">
                     Sign in to Banner to see your schedule and registration time.{' '}
                     <a href={SIGN_IN_URL} onClick={beginSignIn}>Sign in &rarr;</a>
+                </div>
+            )}
+            {home.status === 'error' && home.error !== 'signed-out' && (
+                <div className="status status-error home-banner">
+                    Could not load your registrations: {home.error}{' '}
+                    <button className="button-ghost" onClick={loadHome}>Retry</button>
                 </div>
             )}
             <div className="home-grid">
@@ -34,6 +46,9 @@ export default function Home() {
 }
 
 function CurrentSchedule({ term, terms, rows, catalog, settings, loading }) {
+    // The term's catalog gives the most reliable meeting times, but the registration
+    // records often carry their own, so draw from those rather than wait for it.
+    const ready = !!catalog || rows.some((r) => r.meetingsFaculty.length);
     const svg = useMemo(() => {
         const secs = sectionsForRows(rows.filter((r) => r.term === term), catalog);
         return scheduleSvg(buildBlocks(secs, 'registered', settings.buildingScheme).blocks, settings);
@@ -43,9 +58,13 @@ function CurrentSchedule({ term, terms, rows, catalog, settings, loading }) {
         <section className="card card-wide">
             <h2 className="card-title">Schedule{term ? ` · ${termName(terms, term)}` : ''}</h2>
             {loading && <p className="placeholder">Loading your registrations…</p>}
-            {!loading && !term && <p className="placeholder">No active registrations found.</p>}
-            {term && !catalog && <p className="placeholder">Loading this term&rsquo;s classes to place your meetings…</p>}
-            {term && catalog && <ScheduleSvg svg={svg} />}
+            {!loading && !term && (
+                <p className="placeholder">
+                    No active registrations found. <button className="button-ghost" onClick={loadHome}>Retry</button>
+                </p>
+            )}
+            {term && !ready && <p className="placeholder">Loading this term&rsquo;s classes to place your meetings…</p>}
+            {term && ready && <ScheduleSvg svg={svg} />}
         </section>
     );
 }

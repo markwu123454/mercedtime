@@ -126,17 +126,32 @@ api.onSessionLost((kind) => set({
 // --- catalogs ------------------------------------------------------------------
 
 // searchResults reads the term from session state, so two catalogs loading at once
-// would trample each other's saveTerm. Every load goes through one queue.
-let queue = Promise.resolve();
+// would trample each other's saveTerm. Every load goes through one queue. A priority
+// job runs next, ahead of anything waiting (never ahead of the one running).
+const pending = [];
+let pumping = false;
+async function pump() {
+    if (pumping) return;
+    pumping = true;
+    while (pending.length) {
+        const job = pending.shift();
+        try { job.resolve(await job.run()); } catch (e) { job.reject(e); }
+    }
+    pumping = false;
+}
+const enqueue = (run, priority) => new Promise((resolve, reject) => {
+    pending[priority ? 'unshift' : 'push']({ run, resolve, reject });
+    pump();
+});
 const inflight = new Map();
 
 /** One term's full section list, loaded once per session. The selected term streams
  *  into `sections` page by page; other terms (the home page's) load quietly. */
-export function loadSections(term) {
+export function loadSections(term, { priority = false } = {}) {
     const cached = state.sectionsByTerm[term];
     if (cached) return Promise.resolve(cached);
     if (inflight.has(term)) return inflight.get(term);
-    const p = queue.then(async () => {
+    const p = enqueue(async () => {
         await api.saveTerm(term);
         const acc = [];
         await api.searchResults(term, {
@@ -150,8 +165,7 @@ export function loadSections(term) {
         // term, and caching it would hide the retry.
         if (acc.length) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: acc } });
         return acc;
-    });
-    queue = p.catch(() => {});
+    }, priority);
     inflight.set(term, p);
     p.then(() => inflight.delete(term), () => inflight.delete(term));
     return p;
@@ -199,19 +213,72 @@ export async function loadRegistered(term) {
 
 const smallest = (codes) => codes.map(String).sort((a, b) => Number(a) - Number(b))[0] || null;
 
+const fatal = (e) => e.name === 'SessionExpired' || e.name === 'SessionPoisoned';
+
+// UC Merced's term codes are the calendar year plus 10 (spring), 20 (summer) or 30 (fall).
+const calendarTerm = (d = new Date()) =>
+    `${d.getFullYear()}${d.getMonth() < 5 ? '10' : d.getMonth() < 8 ? '20' : '30'}`;
+
+let openTermsReady = Promise.resolve();
+
+/** The student's current registrations.
+ *
+ *  registrationHistory/reset takes its term explicitly and is the call that works cold
+ *  (banner-api-reference.md), so it goes first; the parameterless active-registrations
+ *  call follows. If that comes back empty, ask term by term for the likeliest terms
+ *  rather than showing an empty home page. */
+async function fetchHomeRows() {
+    const known = state.terms.map((t) => String(t.code)).sort((a, b) => Number(b) - Number(a));
+    const guess = known.find((c) => Number(c) <= Number(calendarTerm())) || known[0];
+    const byTerm = {};
+    const fetchTerm = async (t) => {
+        byTerm[t] ??= registrationRows(await api.getRegistrations(t)).map((r) => normalizeRegistration(r, t));
+        return byTerm[t];
+    };
+
+    const prime = state.term || guess;
+    if (prime) {
+        try { await fetchTerm(prime); } catch (e) { if (fatal(e)) throw e; }
+    }
+    try {
+        const active = registrationRows(await api.getActiveRegistrations())
+            .map((r) => normalizeRegistration(r, guess)).filter((r) => !r.dropped);
+        if (active.length) return active;
+    } catch (e) { if (fatal(e)) throw e; }
+
+    await openTermsReady;
+    const candidates = [...new Set([guess, ...state.openTerms.map((t) => String(t.code)), ...known.slice(0, 3)])]
+        .filter(Boolean).slice(0, 5);
+    const withRows = [];
+    for (const t of candidates) {
+        try { if ((await fetchTerm(t)).some((r) => !r.dropped)) withRows.push(t); } catch (e) { if (fatal(e)) throw e; }
+    }
+    const now = calendarTerm();
+    const chosen = withRows.filter((c) => Number(c) <= Number(now)).sort((a, b) => Number(b) - Number(a))[0]
+        || smallest(withRows);
+    return chosen ? byTerm[chosen].filter((r) => !r.dropped) : [];
+}
+
 /** What the home page needs: which term is "now", which is next, and the next term's
  *  time ticket. The current term is the earliest term with active registrations. */
-async function loadHome() {
+export async function loadHome() {
+    if (state.home.status === 'loading') return;
     set({ home: { ...state.home, status: 'loading', error: null } });
-    let activeRows = [];
+    let live = [];
+    let error = null;
     try {
-        activeRows = registrationRows(await api.getActiveRegistrations()).map((r) => normalizeRegistration(r));
+        live = await fetchHomeRows();
         set({ auth: 'in' });
     } catch (e) {
-        set({ home: { ...state.home, status: 'error', error: e.name === 'SessionExpired' ? 'signed-out' : e.message } });
+        error = e.name === 'SessionExpired' ? 'signed-out' : e.message;
     }
-    const live = activeRows.filter((r) => !r.dropped);
     const currentTerm = smallest(live.map((r) => r.term).filter(Boolean));
+    set({ home: { ...state.home, status: error ? 'error' : 'ok', error, currentTerm, activeRows: live } });
+
+    // Queued ahead of the selected term's catalog: this is what the home page draws from.
+    if (currentTerm) loadSections(currentTerm, { priority: true }).catch(() => {});
+
+    await openTermsReady;
     const codes = (list) => list.map((t) => String(t.code));
     const later = (list) => smallest(list.filter((c) => Number(c) > Number(currentTerm)));
     // With no registrations to anchor on, fall back to the first term open for
@@ -219,9 +286,7 @@ async function loadHome() {
     const nextTerm = currentTerm
         ? later(codes(state.openTerms)) || later(codes(state.terms))
         : smallest(codes(state.openTerms)) || codes(state.terms).sort((a, b) => Number(b) - Number(a))[0] || null;
-    set({ home: { status: state.home.status === 'error' ? 'error' : 'ok', error: state.home.error, currentTerm, nextTerm, activeRows: live } });
-
-    if (currentTerm) loadSections(currentTerm).catch(() => {});
+    set({ home: { ...state.home, nextTerm } });
     if (nextTerm) loadTicket(nextTerm);
 }
 
@@ -261,16 +326,20 @@ export async function boot() {
     }
 
     const stored = (await chrome.storage.local.get(TERM_KEY))[TERM_KEY];
-    const term = stored || terms[0]?.code || null;
-    set({ terms, term });
+    set({ terms, term: stored || null });
 
     // Which terms are open for registration. Authenticated and optional — its absence
     // just means we cannot show the registration window, not that anything is broken.
-    const openTerms = api.getOpenTerms()
+    openTermsReady = api.getOpenTerms()
         .then((o) => set({ openTerms: o, auth: 'in' }))
         .catch(() => {});
 
+    // The home page goes first: a few small requests, and it queues the current term's
+    // catalog ahead of the selected term's. Loading the selected term's catalog first
+    // (dozens of pages) used to hold the home page's own data back until it finished.
+    await loadHome();
+
+    const term = stored || state.home.currentTerm || terms[0]?.code || null;
+    set({ term });
     if (term) await selectTerm(term);
-    await openTerms;
-    loadHome();
 }
