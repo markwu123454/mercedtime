@@ -19,7 +19,17 @@ export const courseKeyOf = (department, number) =>
 // How a requirement's instruction starts. An audit heading is a title and an instruction in one
 // element ("Introductory Physics I" + "Complete the following courses:"), and the two can arrive
 // with nothing between them.
-const INSTRUCTION = /(Complete|All courses|All of the following|Choose|Select|Earn|A minimum of|At least)(?=[\s\w])/;
+const INSTRUCTION = /(Complete|All courses|All of the following|Choose|Select|Earn|A minimum of|At least)(?=[\s\w])|To see the complete course list/;
+
+/** Drops the link prompt (which cannot be followed from here) and a status word the page repeats
+ *  after the instruction. */
+export function tidyDescription(text) {
+    return String(text ?? '')
+        .replace(/To see the complete course list, click here\.?/gi, '')
+        .replace(/\s+(Complete|Needed|In Progress)\s*$/i, '')
+        .replace(/^(Complete|Needed|In Progress)\s*$/i, '')
+        .replace(/\s+/g, ' ').trim();
+}
 
 /** "Mathematics RequirementComplete five courses from the following list:" ->
  *  { title: 'Mathematics Requirement', description: 'Complete five courses from the following list:' }.
@@ -27,7 +37,7 @@ const INSTRUCTION = /(Complete|All courses|All of the following|Choose|Select|Ea
 export function splitHeading(text) {
     const t = String(text ?? '').replace(/\s+/g, ' ').trim();
     const m = INSTRUCTION.exec(t);
-    if (m && m.index > 0) return { title: t.slice(0, m.index).trim(), description: t.slice(m.index).trim() };
+    if (m && m.index > 0) return { title: t.slice(0, m.index).trim(), description: tidyDescription(t.slice(m.index)) };
     return { title: t, description: '' };
 }
 

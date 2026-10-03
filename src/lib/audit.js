@@ -8,13 +8,13 @@
 // fails soft: anything not found comes back empty, never as a thrown error. Only a signed-out
 // session throws, as AuditSessionError.
 
-import { auditIdFromHref, dedupeRequirements, splitHeading } from './degree.js';
+import { auditIdFromHref, dedupeRequirements, splitHeading, tidyDescription } from './degree.js';
 
 export const AUDIT_BASE = 'https://ucmerced.uachieve.com/selfservice';
 
 /** Bumped whenever parseAudit's output changes. The audit read last is kept on disk and reused
  *  while uAchieve has nothing newer, so a copy parsed by an older parser has to be read again. */
-export const PARSER_VERSION = 3;
+export const PARSER_VERSION = 4;
 
 export class AuditSessionError extends Error {
     constructor() { super('uAchieve session ended'); this.name = 'AuditSessionError'; }
@@ -41,7 +41,7 @@ function heading(el) {
     const byWords = splitHeading(clean(el));
     if (byWords.description) return byWords;
     const parts = [...el.children].map(clean).filter(Boolean);
-    return parts.length === 2 ? { title: parts[0], description: parts[1] } : byWords;
+    return parts.length === 2 ? { title: parts[0], description: tidyDescription(parts[1]) } : byWords;
 }
 const num = (n) => { const m = clean(n).match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : null; };
 const parse = (html) => new DOMParser().parseFromString(html, 'text/html');

@@ -2,7 +2,7 @@
 // does to an audit's open requirements. (The HTML parsers need a browser; see
 // fixtures/uachieve/README.md.) Run: npm run check
 import assert from 'node:assert/strict';
-import { auditIdFromHref, courseKeyOf, dedupeRequirements, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, splitHeading, unmetNodes } from '../src/lib/degree.js';
+import { auditIdFromHref, courseKeyOf, dedupeRequirements, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, splitHeading, tidyDescription, unmetNodes } from '../src/lib/degree.js';
 
 assert.equal(normalizeNumber('10H'), '010H');
 assert.equal(normalizeNumber('010h'), '010H');
@@ -23,6 +23,9 @@ const cases = [
     ['Residency', 'Residency', ''],
     ['Complete Core', 'Complete Core', ''],
 ];
+assert.equal(tidyDescription('To see the complete course list, click here. Complete'), '');
+assert.equal(tidyDescription('Complete two courses: Needed'), 'Complete two courses:');
+assert.deepEqual(splitHeading('Scientific Method To see the complete course list, click here.'), { title: 'Scientific Method', description: '' });
 for (const [text, title, description] of cases) assert.deepEqual(splitHeading(text), { title, description }, text);
 
 const seq = Buffer.from('!!!!intSeqNo=40392277').toString('base64');
