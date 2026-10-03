@@ -27,6 +27,15 @@ export const DEFAULT_SETTINGS = {
     softLectures: true,
     softAsFree: false,       // draw the free-time boxes as if skippable lectures were not there
     softOverride: {},
+    // The schedule generator on the Plan page has its own settings, separate from the
+    // global ones above; they start from these and are changed there.
+    plan: {
+        sort: 'gaps', earliest: 0, latest: 24 * 60, gap: 15, daysOff: [], openOnly: false,
+        keepPicked: false,
+        skipLectures: true,      // treat lectures as skippable when searching
+        allowSoftClash: false,   // let a skippable lecture overlap another class
+        softOverride: {},        // per course: true = skippable, false = required
+    },
     // Downloads
     backgroundDownload: true,   // keep downloading terms in the background while the app is open
     keepTerms: 12,              // how many of the newest terms to keep downloaded

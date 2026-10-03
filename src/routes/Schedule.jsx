@@ -81,7 +81,7 @@ export default function Schedule() {
                     </div>
 
                     <div className="detail-section">
-                        <label className="checkbox" title="Lectures rarely take attendance. A skippable lecture is drawn dashed, and a day with only those is marked optional. Each course can override this on its plan page.">
+                        <label className="checkbox" title="Lectures rarely take attendance. A skippable lecture is drawn dashed, and a day with only those is marked optional.">
                             <input type="checkbox" checked={settings.softLectures} onChange={(e) => set({ softLectures: e.target.checked })} />
                             Lectures are skippable
                         </label>

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { togglePlanCourse, togglePlanSection, updateSettings } from '../lib/store.js';
+import { togglePlanCourse, togglePlanSection, updatePlanSettings } from '../lib/store.js';
 import {
     buildAnchors, classMeetings, fmtMeeting, fmtLoc, primaryFaculty, seatsLabel, tierOf,
 } from '../lib/sections.js';
@@ -61,15 +61,16 @@ export default function PlanItem({ item, term, sections, loading, settings }) {
     );
 }
 
-/** Whether this course's lecture counts as skippable. "Auto" follows the global setting. */
+/** Whether this course's lecture counts as skippable in the schedule search. "Auto"
+ *  follows the Plan page's "I might skip lectures" setting. */
 export function LectureSetting({ courseKey, settings }) {
-    const cur = settings.softOverride?.[courseKey];
+    const cur = settings.plan.softOverride?.[courseKey];
     const value = cur === undefined ? 'auto' : String(cur);
     const change = (e) => {
-        const next = { ...(settings.softOverride || {}) };
+        const next = { ...(settings.plan.softOverride || {}) };
         if (e.target.value === 'auto') delete next[courseKey];
         else next[courseKey] = e.target.value === 'true';
-        updateSettings({ softOverride: next });
+        updatePlanSettings({ softOverride: next });
     };
     return (
         <select className="field select-field lecture-setting" value={value} onChange={change}

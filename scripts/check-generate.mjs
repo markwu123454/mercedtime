@@ -136,5 +136,17 @@ const plan = store.getState().planAll.T;
 assert.deepEqual(plan.XX001.crns, ['x2'], 'replaces the course\'s earlier pick');
 assert.deepEqual(plan.YY001.crns, ['y1'], 'adds a course that was not in the plan');
 assert.deepEqual([...store.getState().plan].sort(), ['x2', 'y1']);
+
+// the Plan page's settings are separate from the global ones
+assert.equal(store.getState().settings.softLectures, true);
+assert.equal(store.getState().settings.plan.skipLectures, true);
+await store.updatePlanSettings({ skipLectures: false, sort: 'days' });
+assert.equal(store.getState().settings.plan.skipLectures, false, 'the generator has its own switch');
+assert.equal(store.getState().settings.plan.sort, 'days');
+assert.equal(store.getState().settings.softLectures, true, 'and changing it leaves the global setting alone');
+await store.updateSettings({ softLectures: false });
+assert.equal(store.getState().settings.plan.sort, 'days', 'changing the global setting leaves the plan settings alone');
+assert.equal(isSoft(P[0], { softLectures: store.getState().settings.plan.skipLectures }), false);
+assert.equal(isSoft(P[0], { softLectures: true }), true, 'the generator decides for itself, whatever the global setting is');
 console.log('ok (apply)');
 process.exit(0);

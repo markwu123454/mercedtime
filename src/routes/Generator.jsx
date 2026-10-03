@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { applySchedule, updateSettings } from '../lib/store.js';
+import { applySchedule, updatePlanSettings } from '../lib/store.js';
 import { courseKey } from '../lib/sections.js';
-import { DEFAULT_FILTERS, generateSchedules } from '../lib/generate.js';
+import { generateSchedules } from '../lib/generate.js';
 import { buildBlocks, isSoft, range, scheduleSvg, shortType, DAYS } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { ScheduleSvg, minsToInput, inputToMins } from './shared.jsx';
@@ -12,15 +12,17 @@ const hm = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : '
 // Every schedule that fits the planned courses without a clash, ranked, for the user
 // to pick one. Picking writes the schedule's CRNs into the plan.
 export default function Generator({ term, items, taken, sections, settings }) {
-    const [f0, setF] = useState({ ...DEFAULT_FILTERS, gap: 15 });
-    const [keepPicked, setKeepPicked] = useState(false);
     const [shown, setShown] = useState(PAGE);
-    const patch = (p) => setF((cur) => ({ ...cur, ...p }));
-    // Whether lectures are skippable is the one global setting (also in Schedule settings),
-    // not a switch of this page's own: two switches could disagree, and then ticking this
-    // one changed nothing because the drawing and the lecture check followed the other.
-    const skip = !!settings.softLectures;
-    const f = useMemo(() => ({ ...f0, skipLectures: skip, allowSoftClash: skip && f0.allowSoftClash }), [f0, skip]);
+
+    // The generator's own settings (settings.plan), kept apart from the global ones: what
+    // counts as a skippable lecture here does not follow, or change, the Schedule page.
+    const ps = settings.plan;
+    const patch = (p) => updatePlanSettings(p);
+    const keepPicked = ps.keepPicked;
+    const f = useMemo(() => ({
+        sort: ps.sort, earliest: ps.earliest, latest: ps.latest, gap: ps.gap, daysOff: ps.daysOff, openOnly: ps.openOnly,
+        skipLectures: ps.skipLectures, allowSoftClash: ps.skipLectures && ps.allowSoftClash,
+    }), [ps]);
 
     const fixed = useMemo(() => sectionsForRows(taken, sections), [taken, sections]);
     const { courses, skipped } = useMemo(() => {
@@ -37,7 +39,7 @@ export default function Generator({ term, items, taken, sections, settings }) {
         return { courses, skipped };
     }, [items, taken, sections, keepPicked]);
 
-    const soft = useMemo(() => (s) => isSoft(s, settings), [settings]);
+    const soft = useMemo(() => (s) => isSoft(s, { softLectures: ps.skipLectures, softOverride: ps.softOverride }), [ps]);
     const out = useMemo(
         () => (courses.length ? generateSchedules({ courses, fixed, filters: f, isSoft: soft }) : null),
         [courses, fixed, f, soft]);
@@ -92,11 +94,11 @@ export default function Generator({ term, items, taken, sections, settings }) {
                     Open seats only
                 </label>
                 <label className="checkbox">
-                    <input type="checkbox" checked={keepPicked} onChange={(e) => setKeepPicked(e.target.checked)} />
+                    <input type="checkbox" checked={keepPicked} onChange={(e) => patch({ keepPicked: e.target.checked })} />
                     Keep sections I already picked
                 </label>
                 <label className="checkbox" title="Lectures that take no attendance do not count as days on campus, as gaps, or against the time and days-off filters">
-                    <input type="checkbox" checked={f.skipLectures} onChange={(e) => updateSettings({ softLectures: e.target.checked })} />
+                    <input type="checkbox" checked={f.skipLectures} onChange={(e) => patch({ skipLectures: e.target.checked })} />
                     I might skip lectures
                 </label>
                 <label className="checkbox" title="Assume you would skip the lecture when it overlaps another class">

@@ -136,6 +136,9 @@ export async function updateSettings(patch) {
     await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
+/** The Plan page's own settings (see DEFAULT_SETTINGS.plan), separate from the global ones. */
+export const updatePlanSettings = (patch) => updateSettings({ plan: { ...state.settings.plan, ...patch } });
+
 // --- session -----------------------------------------------------------------
 
 // A lost session is a first-class state, never an empty table. Search is public, so
@@ -591,7 +594,11 @@ export async function boot() {
     const saved = await chrome.storage.local.get([PLAN_KEY, SETTINGS_KEY]);
     set({
         planAll: saved[PLAN_KEY] || {},
-        settings: { ...DEFAULT_SETTINGS, ...(saved[SETTINGS_KEY] || {}) },
+        settings: {
+            ...DEFAULT_SETTINGS,
+            ...(saved[SETTINGS_KEY] || {}),
+            plan: { ...DEFAULT_SETTINGS.plan, ...(saved[SETTINGS_KEY]?.plan || {}) },   // new keys appear for old saves
+        },
     });
     await hydrateCacheMeta();
     setInterval(() => { if (document.visibilityState === 'visible') refocus(); }, 60 * 1000);   // seats go stale while a page stays open
