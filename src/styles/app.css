@@ -32,34 +32,38 @@
     display: flex; align-items: center; gap: var(--spacing-05);
     padding: 0 var(--spacing-05);
     height: 48px; flex: none;
-    background: var(--gray-100); color: var(--text-on-color);
+    background: var(--white); color: var(--text-primary);
+    border-bottom: 1px solid var(--border-subtle);
 }
-.masthead-brand { font-size: var(--body-compact-size); letter-spacing: 0.1px; }
+/* Bebas Neue is the closest free match to the UC Merced wordmark; it is declared in app.html. */
 .masthead-brand {
-    font-weight: 600;
-    /* The logo colours need a light ground: navy on the dark bar is barely visible. */
-    background: var(--white); padding: 4px var(--spacing-04);
+    font-family: 'Bebas Neue', 'Arial Narrow', Impact, sans-serif;
+    font-size: 30px; line-height: 1; letter-spacing: 0.5px;
+    text-transform: uppercase; font-weight: 400;
+    padding-top: 3px;      /* the face sits high in its box */
+    text-decoration: none;
 }
 .brand-merced { color: var(--brand-blue); }
 .brand-time { color: var(--brand-gold); }
 .masthead-spacer { margin-left: auto; }
-.masthead-user { color: var(--gray-30); font-size: var(--label-01-size); }
+.masthead-user { color: var(--text-secondary); font-size: var(--label-01-size); }
 
 .nav { display: flex; height: 100%; }
 .nav-item {
     display: flex; align-items: center; padding: 0 var(--spacing-05); white-space: nowrap;
     background: none; border: 0; cursor: pointer;
-    color: var(--gray-30); font: inherit; font-size: var(--body-compact-size);
+    color: var(--text-secondary); font: inherit; font-size: var(--body-compact-size);
+    text-decoration: none;
     border-bottom: 3px solid transparent;
     transition: background var(--duration-fast) var(--ease-productive);
 }
-.nav-item:hover { background: var(--gray-80); color: var(--white); }
-.nav-item[aria-current='page'] { color: var(--white); border-bottom-color: var(--blue-60); }
+.nav-item:hover { background: var(--layer-hover); color: var(--text-primary); }
+.nav-item[aria-current='page'] { color: var(--text-primary); border-bottom-color: var(--blue-60); }
 
 /* The one control that leaves the app. Styled as Carbon's primary button so it reads
    as a destination rather than another tab. */
 .exit-button {
-    display: flex; align-items: center; height: 100%;
+    display: flex; align-items: center; height: 100%; text-decoration: none;
     padding: 0 var(--spacing-05);
     background: var(--blue-60); color: var(--text-on-color);
     border: 0; cursor: pointer; font: inherit; font-size: var(--body-compact-size);
@@ -247,7 +251,7 @@ input[type='number'].field { width: 90px; }
 .chip { background: var(--gray-20); padding: 0 var(--spacing-03); font-size: var(--label-01-size); font-family: var(--font-mono); }
 .inline-form .field { width: 260px; }
 .masthead-link { text-decoration: underline; cursor: pointer; }
-.masthead-link:hover { color: var(--white); }
+.masthead-link:hover { color: var(--text-primary); }
 
 /* --- schedule generator -------------------------------------------------------- */
 .generator { padding-bottom: var(--spacing-07); }

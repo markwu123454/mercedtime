@@ -4,7 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MercedTime</title>
-  <style>html, body { margin: 0; height: 100%; }</style>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    /* Bebas Neue (SIL OFL), the closest free match to the UC Merced wordmark. Declared here
+       because Chrome ignores @font-face inside a shadow root; the app's shadow tree can
+       still use the family. */
+    @font-face { font-family: 'Bebas Neue'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/bebas-neue.woff2) format('woff2'); }
+  </style>
 </head>
 <body>
   <script src="mercedtime.js"></script>

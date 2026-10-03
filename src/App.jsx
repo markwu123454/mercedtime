@@ -28,7 +28,6 @@ function useHashRoute(fallback = 'home') {
 }
 
 const TABS = [
-    ['home', 'Home'],
     ['search', 'Find classes'],
     ['plan', 'Plan'],
     ['schedule', 'Schedule'],
@@ -44,7 +43,10 @@ export default function App() {
     return (
         <>
             <header className="masthead">
-                <span className="masthead-brand"><span className="brand-merced">Merced</span><span className="brand-time">Time</span></span>
+                <a className="masthead-brand" href="#/home" aria-label="MercedTime, home"
+                   aria-current={route === 'home' ? 'page' : undefined}>
+                    <span className="brand-merced">Merced</span><span className="brand-time">Time</span>
+                </a>
                 <nav className="nav">
                     {TABS.map(([id, label]) => (
                         <a key={id} href={`#/${id}`} className="nav-item"
