@@ -33,7 +33,7 @@ export function normalizeRegistration(r, fallbackTerm = '') {
         grade: r.grade || '',
         dropped: DROPPED.test(status),
         meetingsFaculty: asMeetings(r),
-        scheduleTypeDescription: r.scheduleTypeDescription || r.scheduleType || '',
+        scheduleTypeDescription: r.scheduleTypeDescription || r.scheduleType || r.scheduleDescription || '',
     };
 }
 

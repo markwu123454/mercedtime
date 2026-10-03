@@ -5,6 +5,8 @@ const HOST = 'reg-prod.ec.ucmerced.edu';
 const MENU_PATHS = [
   '/StudentRegistrationSsb/ssb/registration',
   '/StudentRegistrationSsb/ssb/registration/',
+  '/StudentRegistrationSsb/ssb/registration/registration',
+  '/StudentRegistrationSsb/ssb/registration/registration/',
 ];
 
 chrome.webNavigation.onBeforeNavigate.addListener(

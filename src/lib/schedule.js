@@ -44,6 +44,7 @@ export function shortType(desc) {
     if (/^lecture/i.test(d)) return 'Lecture';
     if (/^studio/i.test(d)) return 'Studio';
     if (/^fieldwork/i.test(d)) return 'Fieldwork';
+    if (/^individual/i.test(d)) return 'Individual';
     return d.split(/[\s-]/)[0] || '';
 }
 
@@ -54,13 +55,15 @@ export function buildBlocks(sections, kind, scheme = 'common') {
     const unplaced = [];
     for (const sec of sections) {
         const code = `${sec.subject} ${sec.courseNumber}`;
-        const type = shortType(sec.scheduleTypeDescription);
         const meets = classMeetings(sec);
         let placed = false;
         for (const mt of meets) {
             if (!mt.beginTime || !mt.endTime) continue;
             const start = toMin(mt.beginTime);
             const end = toMin(mt.endTime);
+            // The section's own schedule type first; the meeting carries a short label of
+            // its own ("Lab", "Discussion") for records that arrive without one.
+            const type = shortType(sec.scheduleTypeDescription) || shortType(mt.meetingTypeDescription) || 'Class';
             for (const [i, [key]] of DAYS.entries()) {
                 if (!mt[key]) continue;
                 placed = true;
@@ -70,7 +73,7 @@ export function buildBlocks(sections, kind, scheme = 'common') {
                 });
             }
         }
-        if (!placed) unplaced.push({ code, type, crn: sec.courseReferenceNumber, kind });
+        if (!placed) unplaced.push({ code, type: shortType(sec.scheduleTypeDescription) || 'Class', crn: sec.courseReferenceNumber, kind });
     }
     return { blocks, unplaced };
 }
@@ -188,11 +191,12 @@ export function scheduleSvg(inputBlocks, settings = DEFAULT_SETTINGS) {
         const by = Math.round(y(b.start)), bh = Math.round(((b.end - b.start) * HOUR) / 60);
         const bw = Math.round(laneW - (b.lanes > 1 ? 2 : 0));
         o.push(`<rect x="${Math.round(bx)}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${s.fill}" stroke="${s.stroke}" stroke-width="1"${s.dash}/>`);
-        const lines = [
-            [b.code, true],
-            [`${b.type} ${range(b.start, b.end)}`, false],
-            [b.loc, false],
-        ].slice(0, Math.max(1, Math.min(3, Math.floor((bh - 4) / 12))));
+        // A box too short for a second line still has to say what kind of class it is.
+        const room = Math.max(1, Math.min(3, Math.floor((bh - 4) / 12)));
+        const lines = (room === 1
+            ? [[`${b.code} ${b.type}`, true]]
+            : [[b.code, true], [`${b.type} ${range(b.start, b.end)}`, false], [b.loc, false]]
+        ).slice(0, room);
         lines.forEach(([text, bold], i) => {
             if (!text) return;
             o.push(`<text x="${Math.round(bx) + 7}" y="${by + 13 + i * 12}" font-size="11" fill="${s.text}"${bold ? ' font-weight="bold"' : ''}>${esc(fit(text, bw - 10, bold))}</text>`);
