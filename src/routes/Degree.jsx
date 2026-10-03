@@ -5,9 +5,10 @@ import { courseKeyOf, keyFromCourseText, plannedCourses, simulatePlan } from '..
 import { creditNum } from '../lib/sections.js';
 import { termName, ago } from './shared.jsx';
 
-// Three states, three colours, everywhere on this page: done is green, in your plan is blue,
-// and on a requirement but not planned is gray. A requirement in progress counts as done.
-const STATUS = { OK: ['Complete', 'done'], IP: ['In progress', 'done'], NO: ['Needed', 'todo'], NONE: ['No status', 'todo'] };
+// Four states, with hue for the kind of fact and fill for how finished it is. Green is on your
+// record: solid when done, an outline while it is being taken. Blue is only an intention: in
+// your plan. Gray is neither. Yellow is kept for warnings and is not used here.
+const STATUS = { OK: ['Complete', 'done'], IP: ['In progress', 'ip'], NO: ['Needed', 'todo'], NONE: ['No status', 'todo'] };
 const OPTION_CAP = 24;
 
 // What is left of the degree, from the student's newest uAchieve audit, and what the courses
@@ -27,14 +28,18 @@ export default function Degree() {
     const { audit, history, meta, status } = degree;
     const sim = useMemo(() => (audit ? simulatePlan(audit, planned) : null), [audit, planned]);
     const planKeys = useMemo(() => new Set(planned.map((p) => p.key)), [planned]);
-    // Courses already taken or in progress, from the audit's applied courses and the history.
-    const doneKeys = useMemo(() => {
-        const keys = new Set();
+    // Courses already finished, and courses being taken now, from the audit's applied courses and
+    // the history. Finished wins if a course shows up as both.
+    const { doneKeys, takingKeys } = useMemo(() => {
+        const done = new Set();
+        const taking = new Set();
+        const note = (text, inProgress) => { const k = keyFromCourseText(text); if (k) (inProgress ? taking : done).add(k); };
         for (const req of audit?.requirements || []) {
-            for (const node of [req, ...req.subs]) for (const c of node.courses) { const k = keyFromCourseText(c.course); if (k) keys.add(k); }
+            for (const node of [req, ...req.subs]) for (const c of node.courses) note(c.course, c.inProgress);
         }
-        for (const h of history || []) { const k = keyFromCourseText(h.course); if (k) keys.add(k); }
-        return keys;
+        for (const h of history || []) note(h.course, /^IP$/i.test(h.grade) || /progress/i.test(h.status));
+        for (const k of done) taking.delete(k);
+        return { doneKeys: done, takingKeys: taking };
     }, [audit, history]);
 
     const plannedUnits = useMemo(() => {
@@ -67,8 +72,9 @@ export default function Degree() {
             {audit && tab === 'audit' && (
                 <div className="legend">
                     <span className="legend-item"><span className="swatch swatch-done" />Done</span>
+                    <span className="legend-item"><span className="swatch swatch-ip" />Taking now</span>
                     <span className="legend-item"><span className="swatch swatch-plan" />In your plan</span>
-                    <span className="legend-item"><span className="swatch swatch-todo" />On the requirement, not planned</span>
+                    <span className="legend-item"><span className="swatch swatch-todo" />Not taken or planned</span>
                 </div>
             )}
 
@@ -94,7 +100,7 @@ export default function Degree() {
                         <>
                             <Summary audit={audit} plannedUnits={plannedUnits} planned={planned.length} sim={sim} />
                             {audit.requirements.map((req, ri) => (
-                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />
+                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
                             ))}
                         </>
                     )}
@@ -135,7 +141,7 @@ function Summary({ audit, plannedUnits, planned, sim }) {
     );
 }
 
-function Requirement({ req, ri, sim, terms, planKeys, doneKeys }) {
+function Requirement({ req, ri, sim, terms, planKeys, doneKeys, takingKeys }) {
     const [label, tone] = STATUS[req.status] || STATUS.NONE;
     const done = sim?.completes[ri] && req.status === 'NO';
     return (
@@ -149,17 +155,17 @@ function Requirement({ req, ri, sim, terms, planKeys, doneKeys }) {
                     </span>
                 ) : null}
             </div>
-            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />}
+            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />}
             {req.subs.map((sub, si) => (
                 <div key={si} className="sub-row">
-                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />
+                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
                 </div>
             ))}
         </section>
     );
 }
 
-function Node({ node, id, sim, terms, planKeys, doneKeys }) {
+function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys }) {
     const [label, tone] = STATUS[node.status] || STATUS.NONE;
     const hit = sim?.assigned[id];
     const hasTitle = 'title' in node && node.title && node.subs === undefined;
@@ -185,13 +191,13 @@ function Node({ node, id, sim, terms, planKeys, doneKeys }) {
                 <p className="planned-hit">Your plan covers this with <strong>{hit.subject} {hit.number}</strong> in {termName(terms, hit.term)}.</p>
             )}
             {node.status !== 'OK' && node.status !== 'IP' && node.options.length > 0 && (
-                <Options options={node.options} planKeys={planKeys} doneKeys={doneKeys} />
+                <Options options={node.options} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
             )}
         </>
     );
 }
 
-function Options({ options, planKeys, doneKeys }) {
+function Options({ options, planKeys, doneKeys, takingKeys }) {
     const [all, setAll] = useState(false);
     const shown = all ? options : options.slice(0, OPTION_CAP);
     return (
@@ -201,10 +207,11 @@ function Options({ options, planKeys, doneKeys }) {
                 {shown.map((o) => {
                     const key = courseKeyOf(o.department, o.number);
                     const done = doneKeys.has(key);
-                    const inPlan = !done && planKeys.has(key);
+                    const taking = !done && takingKeys.has(key);
+                    const inPlan = !done && !taking && planKeys.has(key);
                     return (
-                        <span key={key} className={`chip ${done ? 'chip-done' : inPlan ? 'chip-plan' : 'chip-todo'}`}
-                              title={done ? 'Already taken or in progress' : inPlan ? 'In your plan' : 'Not in your plan'}>
+                        <span key={key} className={`chip ${done ? 'chip-done' : taking ? 'chip-done chip-ip' : inPlan ? 'chip-plan' : 'chip-todo'}`}
+                              title={done ? 'Done' : taking ? 'Taking now' : inPlan ? 'In your plan' : 'Not taken or planned'}>
                             {o.department} {o.number}
                         </span>
                     );
