@@ -17,34 +17,60 @@ chrome.webNavigation.onBeforeNavigate.addListener(
   { url: MENU_PATHS.map((pathEquals) => ({ hostEquals: HOST, schemes: ['https'], pathEquals })) },
 );
 
-// Sign-in round trip. The extension page's "Sign in" link sets pendingSignIn for its
-// own tab and goes to Banner's Prepare for Registration term page. That page is
-// protected, so Banner answers with a redirect to the login (SSO, then Duo) and, once
-// that finishes, back to the same URL.
+// Sign-in round trip. The extension page's "Sign in" link sets pendingSignIn for its own tab
+// and sends the tab to Banner. Banner only starts a login when a page needs one, and which
+// pages do is not something to assume (the term-selection page, for one, shows to anyone and
+// starts nothing). So the worker checks instead of assuming:
 //
-// onCommitted, not onBeforeNavigate: onBeforeNavigate fires when the click starts, at
-// the URL we asked for, before Banner has redirected anywhere, and returning the tab
-// then cancels the login before it begins. onCommitted fires when a navigation lands,
-// at the URL it ended on. The IdP and Duo pages never match, so the login is never
-// interrupted, and the tab is returned only when it arrives back at Banner.
+//   * every time the flagged tab lands on a Banner page, it asks Banner whether the student is
+//     signed in (a request that only answers JSON to a signed-in session);
+//   * signed in: the tab goes back to the app;
+//   * not signed in: the page did not start a login, so the tab is sent to the next URL that is
+//     likely to (up to the end of the list), and the check repeats when it lands.
 //
-// The flag is tab-specific and expires, so a normal visit to that Banner page is left
-// alone.
+// onCommitted, not onBeforeNavigate: it fires when a navigation lands, at the URL it ended on,
+// so the IdP and Duo pages (another host) and the redirects in between never trigger it and the
+// login is never interrupted. The flag is tab-specific and expires, so an ordinary visit to
+// Banner is left alone.
 const SIGN_IN_TTL_MS = 10 * 60 * 1000;
+const BASE = `https://${HOST}/StudentRegistrationSsb/ssb`;
+const SIGN_IN_ENTRIES = [
+  `${BASE}/registration/registerPostSignIn?mode=preReg`,        // what Banner's own "Prepare for Registration" link leads through
+  `${BASE}/classRegistration/getTerms?searchTerm=&offset=1&max=1`,
+  `${BASE}/prepareRegistration/prepareRegistration`,
+];
+
+/** True when Banner treats this browser as signed in: the open-terms list answers JSON. */
+async function signedIn() {
+  try {
+    const res = await fetch(SIGN_IN_ENTRIES[1], { credentials: 'include', redirect: 'manual' });
+    return res.type !== 'opaqueredirect' && res.ok
+      && res.headers.get('X-Login-Page') !== 'true'
+      && /json/i.test(res.headers.get('content-type') || '');
+  } catch {
+    return false;
+  }
+}
 
 chrome.webNavigation.onCommitted.addListener(
   async (details) => {
     if (details.frameId !== 0) return;
-    const { pendingSignIn } = await chrome.storage.session.get('pendingSignIn');
-    if (!pendingSignIn || pendingSignIn.tabId !== details.tabId) return;
-    await chrome.storage.session.remove('pendingSignIn');
-    if (Date.now() - pendingSignIn.at > SIGN_IN_TTL_MS) return;
-    chrome.tabs.update(details.tabId, { url: chrome.runtime.getURL('app.html') });
+    const { pendingSignIn: flag } = await chrome.storage.session.get('pendingSignIn');
+    if (!flag || flag.tabId !== details.tabId) return;
+    const app = chrome.runtime.getURL('app.html');
+    const finish = async () => {
+      await chrome.storage.session.remove('pendingSignIn');
+      chrome.tabs.update(details.tabId, { url: app });
+    };
+    if (Date.now() - flag.at > SIGN_IN_TTL_MS) { await chrome.storage.session.remove('pendingSignIn'); return; }
+
+    if (await signedIn()) { await finish(); return; }
+
+    // This page did not start a login. Try the next URL that might; give up at the end.
+    const attempt = (flag.attempt || 0) + 1;
+    if (attempt >= SIGN_IN_ENTRIES.length) { await finish(); return; }
+    await chrome.storage.session.set({ pendingSignIn: { ...flag, attempt } });
+    chrome.tabs.update(details.tabId, { url: SIGN_IN_ENTRIES[attempt] });
   },
-  {
-    url: [{
-      hostEquals: HOST, schemes: ['https'],
-      pathEquals: '/StudentRegistrationSsb/ssb/term/termSelection', queryContains: 'mode=preReg',
-    }],
-  },
+  { url: [{ hostEquals: HOST, schemes: ['https'], pathPrefix: '/StudentRegistrationSsb/ssb/' }] },
 );
