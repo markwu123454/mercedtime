@@ -15,7 +15,7 @@ const TERM_KEY = 'mercedtime_term';
 const SETTINGS_KEY = 'mercedtime_settings';
 
 let state = {
-    route: 'search',
+    route: 'home',          // which tab is showing; decides which term's catalog loads
     term: null,
     terms: [],
     openTerms: [],          // terms open for registration — the "may I register" signal
@@ -125,49 +125,82 @@ api.onSessionLost((kind) => set({
 
 // --- catalogs ------------------------------------------------------------------
 
-// searchResults reads the term from session state, so two catalogs loading at once
-// would trample each other's saveTerm. Every load goes through one queue. A priority
-// job runs next, ahead of anything waiting (never ahead of the one running).
-const pending = [];
-let pumping = false;
-async function pump() {
-    if (pumping) return;
-    pumping = true;
-    while (pending.length) {
-        const job = pending.shift();
-        try { job.resolve(await job.run()); } catch (e) { job.reject(e); }
-    }
-    pumping = false;
-}
-const enqueue = (run, priority) => new Promise((resolve, reject) => {
-    pending[priority ? 'unshift' : 'push']({ run, resolve, reject });
-    pump();
-});
-const inflight = new Map();
+// Only one term's catalog is ever being fetched: the one the user is looking at. Asking
+// for another term (or leaving the page that needs it) pauses the current fetch at the
+// next page boundary and keeps what it already has; coming back resumes at that offset.
+//
+// One fetcher is also a correctness requirement. searchResults reads the term from
+// session state, so two catalogs loading together would trample each other's
+// saveTerm. After a pause the session holds the other term, so the term is committed
+// again before the first resumed page.
+const loads = new Map();   // term -> { rows, offset, total, failed, waiters }
+let committed = null;      // the term the session's search state currently holds
+let running = false;
 
-/** One term's full section list, loaded once per session. The selected term streams
- *  into `sections` page by page; other terms (the home page's) load quietly. */
-export function loadSections(term, { priority = false } = {}) {
+/** The term the user currently needs. On Home that is the term its schedule is drawn
+ *  from; everywhere else it is the term picked in the toolbar. */
+const wantedTerm = () =>
+    (state.route === 'home' ? state.home.currentTerm : null) || state.term;
+
+async function loadNextPage(term, l) {
+    if (committed !== term) {
+        committed = null;
+        await api.saveTerm(term);
+        committed = term;
+    }
+    const { rows, total } = await api.searchPage(term, l.offset);
+    l.rows.push(...rows);
+    l.offset += rows.length;
+    l.total = total || l.rows.length;
+    if (state.term === term) set({ sections: [...l.rows], loadingText: `Loading… ${l.offset} / ${l.total}` });
+    return !rows.length || l.offset >= l.total;
+}
+
+async function runLoader() {
+    if (running) return;
+    running = true;
+    try {
+        for (;;) {
+            const term = wantedTerm();
+            const l = term && loads.get(term);
+            if (!l || l.failed || state.sectionsByTerm[term]) return;
+            try {
+                if (await loadNextPage(term, l)) {
+                    // An empty answer is not cached: it can be a session that never
+                    // committed the term, and caching it would hide the retry.
+                    if (l.rows.length) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: l.rows } });
+                    loads.delete(term);
+                    l.waiters.forEach((w) => w.resolve(l.rows));
+                }
+            } catch (e) {
+                l.failed = true;
+                l.waiters.splice(0).forEach((w) => w.reject(e));
+            }
+        }
+    } finally {
+        running = false;
+    }
+}
+
+/** Point the loader at whatever the user currently needs. Call after anything that
+ *  changes that: the selected term, the route, the home page's term. */
+export function refocus() { runLoader(); }
+
+export function setRoute(route) {
+    set({ route });
+    refocus();
+}
+
+/** One term's full section list, resolved once it has loaded. Does not by itself make
+ *  the term the active one: the fetch runs while the term is wanted (see wantedTerm). */
+export function loadSections(term) {
     const cached = state.sectionsByTerm[term];
     if (cached) return Promise.resolve(cached);
-    if (inflight.has(term)) return inflight.get(term);
-    const p = enqueue(async () => {
-        await api.saveTerm(term);
-        const acc = [];
-        await api.searchResults(term, {
-            onPage: (page, loaded, total) => {
-                acc.push(...page);
-                // Repoint the array so subscribers see a new identity each page.
-                if (state.term === term) set({ sections: [...acc], loadingText: `Loading… ${loaded} / ${total}` });
-            },
-        });
-        // An empty answer is not cached: it can be a session that never committed the
-        // term, and caching it would hide the retry.
-        if (acc.length) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: acc } });
-        return acc;
-    }, priority);
-    inflight.set(term, p);
-    p.then(() => inflight.delete(term), () => inflight.delete(term));
+    let l = loads.get(term);
+    if (!l) loads.set(term, (l = { rows: [], offset: 0, total: 0, failed: false, waiters: [] }));
+    l.failed = false;                  // asking again is a retry
+    const p = new Promise((resolve, reject) => l.waiters.push({ resolve, reject }));
+    refocus();
     return p;
 }
 
@@ -176,9 +209,11 @@ export async function selectTerm(term) {
     await chrome.storage.local.set({ [TERM_KEY]: term });
 
     const cached = state.sectionsByTerm[term];
-    if (cached) { set({ sections: cached, loading: false, loadingText: '' }); return; }
+    if (cached) { set({ sections: cached, loading: false, loadingText: '' }); refocus(); return; }
 
-    set({ sections: [], loading: true, loadingText: 'Loading classes…' });
+    // Anything already fetched for this term (a paused load) shows straight away.
+    const have = loads.get(term)?.rows || [];
+    set({ sections: [...have], loading: true, loadingText: have.length ? `Loading… ${have.length}` : 'Loading classes…' });
     try {
         const acc = await loadSections(term);
         if (state.term !== term) return;     // the user moved on while it loaded
@@ -275,8 +310,9 @@ export async function loadHome() {
     const currentTerm = smallest(live.map((r) => r.term).filter(Boolean));
     set({ home: { ...state.home, status: error ? 'error' : 'ok', error, currentTerm, activeRows: live } });
 
-    // Queued ahead of the selected term's catalog: this is what the home page draws from.
-    if (currentTerm) loadSections(currentTerm, { priority: true }).catch(() => {});
+    // What the home page draws from. It loads while Home is showing; the loader moves
+    // to the toolbar's term as soon as the user leaves.
+    if (currentTerm) { loadSections(currentTerm).catch(() => {}); refocus(); }
 
     await openTermsReady;
     const codes = (list) => list.map((t) => String(t.code));

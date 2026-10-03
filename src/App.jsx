@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useStore } from './lib/store.js';
+import { useStore, setRoute } from './lib/store.js';
 import { BASE } from './lib/api.js';
 import { SIGN_IN_URL, beginSignIn } from './lib/signin.js';
 import Home from './routes/Home.jsx';
@@ -32,6 +32,7 @@ const TABS = [
 
 export default function App() {
     const route = useHashRoute();
+    useEffect(() => setRoute(route), [route]);
     const { auth, notifications } = useStore((s) => s);
 
     return (

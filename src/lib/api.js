@@ -110,29 +110,22 @@ export const getOpenTerms = ({ max = 10 } = {}) =>
 // in pageMaxSize — so 50-row pages beat 500 for total load *and* paint incrementally.
 const PAGE_SIZE = 50;
 
-/** Stream every section for a term. onPage(rows, loaded, total) fires per page. */
-export async function searchResults(term, { onPage } = {}) {
-    let offset = 0;
-    const all = [];
-    for (;;) {
-        // txt_term is ignored by the server — the term comes from session state set by
-        // saveTerm() above. Sent anyway because Banner's own client sends it, so we
-        // stay indistinguishable from it if that ever starts mattering.
-        const data = await getJSON(`searchResults/searchResults?${qs({
-            txt_term: term,
-            pageOffset: offset,
-            pageMaxSize: PAGE_SIZE,
-            sortColumn: 'subjectDescription',
-            sortDirection: 'asc',
-        })}`);
-        if (!data?.success || !data.data?.length) break;
-        all.push(...data.data);
-        const total = data.totalCount ?? all.length;
-        onPage?.(data.data, all.length, total);
-        offset += data.data.length;          // advance by rows actually returned
-        if (all.length >= total) break;
-    }
-    return all;
+/** One page of a term's sections, starting at `offset`. The term itself comes from
+ *  session state (saveTerm), not from this call. Returns { rows, total }; an empty
+ *  `rows` means there is nothing at that offset. */
+export async function searchPage(term, offset) {
+    // txt_term is ignored by the server — the term comes from session state set by
+    // saveTerm() above. Sent anyway because Banner's own client sends it, so we
+    // stay indistinguishable from it if that ever starts mattering.
+    const data = await getJSON(`searchResults/searchResults?${qs({
+        txt_term: term,
+        pageOffset: offset,
+        pageMaxSize: PAGE_SIZE,
+        sortColumn: 'subjectDescription',
+        sortDirection: 'asc',
+    })}`);
+    if (!data?.success || !data.data?.length) return { rows: [], total: data?.totalCount ?? 0 };
+    return { rows: data.data, total: data.totalCount ?? offset + data.data.length };
 }
 
 // These answer with HTML fragments, not JSON, and are fetched lazily per section.
