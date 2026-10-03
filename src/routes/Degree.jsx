@@ -3,6 +3,7 @@ import { useStore, loadDegree, runNewAudit, loadSections } from '../lib/store.js
 import { AUDIT_BASE } from '../lib/audit.js';
 import { courseKeyOf, keyFromCourseText, plannedCourses, simulatePlan } from '../lib/degree.js';
 import { creditNum } from '../lib/sections.js';
+import { calendarTerm } from '../lib/registrations.js';
 import CourseDetail from './CourseDetail.jsx';
 import { termName, ago } from './shared.jsx';
 
@@ -116,7 +117,7 @@ export default function Degree() {
             </div>
             {selected
                 ? <CourseDetail courseKeyStr={selected} state={stateOf(selected)} audit={audit} history={history} planned={planned}
-                                courseIndex={courseIndex} cacheMeta={cacheMeta} sectionsByTerm={sectionsByTerm} terms={terms} nextTerm={home.nextTerm} scheme={settings.buildingScheme} />
+                                courseIndex={courseIndex} cacheMeta={cacheMeta} sectionsByTerm={sectionsByTerm} terms={terms} nextTerm={home.nextTerm} scheme={settings.buildingScheme} now={home.currentTerm || calendarTerm()} />
                 : <aside className="detail-pane"><p className="placeholder">Select a course for details.</p></aside>}
             </div>
         </>

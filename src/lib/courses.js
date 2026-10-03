@@ -51,3 +51,17 @@ export function courseOptions(term, index) {
     const list = [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
     return { source: 'history', list };
 }
+
+/** The semesters after `now` up to `years` years on, as term codes: every spring, summer and
+ *  fall. From 202630 (Fall 2026) with 4 years: 202710 through 203030. */
+export function futureTerms(now, years = 4) {
+    const n = Number(now);
+    const out = [];
+    for (let y = Math.floor(n / 100); y <= Math.floor(n / 100) + years; y++) {
+        for (const season of [10, 20, 30]) {
+            const code = y * 100 + season;
+            if (code > n && code <= n + years * 100) out.push(String(code));
+        }
+    }
+    return out;
+}

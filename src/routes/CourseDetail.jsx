@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { loadSections } from '../lib/store.js';
+import { loadSections, addPlanCourse } from '../lib/store.js';
+import { futureTerms } from '../lib/courses.js';
 import * as api from '../lib/api.js';
 import {
     buildAnchors, bySeq, classMeetings, courseKey, fmtMeeting, primaryFaculty, seatsLabel, tierOf,
@@ -24,7 +25,7 @@ const Field = ({ label, children }) => (
 /** The right-hand panel for a course picked on the Degree page, in the style of Find classes:
  *  what state it is in, which requirements it counts toward, where it has been offered, its
  *  sections in a downloaded semester, and Banner's own description, prerequisites and so on. */
-export default function CourseDetail({ courseKeyStr, state, audit, history, planned, courseIndex, cacheMeta, sectionsByTerm, terms, nextTerm, scheme }) {
+export default function CourseDetail({ courseKeyStr, state, audit, history, planned, courseIndex, cacheMeta, sectionsByTerm, terms, nextTerm, scheme, now }) {
     const [pick, setPick] = useState(null);
     const [details, setDetails] = useState(null);
     const [detailError, setDetailError] = useState(null);
@@ -137,6 +138,35 @@ export default function CourseDetail({ courseKeyStr, state, audit, history, plan
                     <div dangerouslySetInnerHTML={{ __html: html }} />
                 </Field>
             ))}
+
+            <AddToTerm courseKeyStr={courseKeyStr} subject={subject} number={number} title={title} planned={planned} terms={terms} now={now} />
         </aside>
+    );
+}
+
+/** Add this course to the plan of a semester in the next four years. A semester with something
+ *  planned shows up on the Plan page by itself, so nothing else has to be set up. */
+function AddToTerm({ courseKeyStr, subject, number, title, planned, terms, now }) {
+    const [added, setAdded] = useState(null);
+    useEffect(() => setAdded(null), [courseKeyStr]);
+    const options = useMemo(() => futureTerms(now), [now]);
+    const have = new Set(planned.filter((p) => p.key === courseKeyStr).map((p) => p.term));
+
+    return (
+        <Field label="Add to a future semester">
+            <select className="field select-field" value="" aria-label="Add to a future semester"
+                    onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return;
+                        addPlanCourse(t, { key: courseKeyStr, subject, number, title });
+                        setAdded(t);
+                    }}>
+                <option value="">Choose a semester…</option>
+                {options.map((t) => (
+                    <option key={t} value={t} disabled={have.has(t)}>{termName(terms, t)}{have.has(t) ? ' (planned)' : ''}</option>
+                ))}
+            </select>
+            {added && <p className="placeholder">Added to {termName(terms, added)}. <a href="#/plan">Open Plan</a></p>}
+        </Field>
     );
 }

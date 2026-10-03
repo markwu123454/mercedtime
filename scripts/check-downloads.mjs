@@ -36,7 +36,7 @@ globalThis.fetch = async (url, init = {}) => {
 
 const store = await import('../src/lib/store.js');
 const cache = await import('../src/lib/cache.js');
-const { courseOptions } = await import('../src/lib/courses.js');
+const { courseOptions, futureTerms } = await import('../src/lib/courses.js');
 const until = async (fn, ms = 4000) => { for (let i = 0; i < ms / 2 && !fn(); i++) await sleep(2); assert.ok(fn(), 'timed out'); };
 const count = (term) => log.filter((l) => l.startsWith(`${term}@`)).length;
 const S = () => store.getState();
@@ -102,6 +102,15 @@ const summerList = courseOptions('202720', { ...idx, '202520': [['MATH011', 'MAT
 assert.deepEqual(summerList.list.map((c) => c.key), ['MATH011'], 'only past summers feed a summer term');
 assert.deepEqual(courseOptions('202710', idx).list.map((c) => c.key), ['CSE030', 'ME001'], 'spring offers the spring courses');
 assert.equal(courseOptions('202710', idx).source, 'history');
+
+// the semesters offered for planning ahead: every spring, summer and fall for four years
+const ahead = futureTerms('202630');
+assert.equal(ahead[0], '202710', 'starts with the next semester');
+assert.equal(ahead.at(-1), '203030', 'ends four years on');
+assert.equal(ahead.length, 12);
+assert.ok(ahead.includes('202820'), 'summers are included');
+assert.equal(futureTerms('202710')[0], '202720');
+assert.equal(futureTerms('202710').at(-1), '203110');
 
 // 7. A semester Banner does not list is never sent to Banner.
 const n = log.length;
