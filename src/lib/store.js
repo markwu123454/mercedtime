@@ -8,7 +8,7 @@ import * as api from './api.js';
 import { courseKey } from './sections.js';
 import { byCourse } from './generate.js';
 import { DEFAULT_SETTINGS } from './schedule.js';
-import { normalizeRegistration, registrationRows } from './registrations.js';
+import { normalizeRegistration, registrationRows, calendarTerm } from './registrations.js';
 import { parseTimeTicket } from './banner.js';
 
 const PLAN_KEY = 'mercedtime_plan_v2';
@@ -38,6 +38,7 @@ let state = {
     home: { status: 'idle', error: null, currentTerm: null, nextTerm: null, activeRows: [] },
     tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', at: ms | null, text } }
     settings: DEFAULT_SETTINGS,
+    discovery: { status: 'idle', checked: 0 },   // the search for past semesters (see discoverTerms)
 };
 
 const subs = new Set();
@@ -261,15 +262,35 @@ export async function loadRegistered(term) {
     }
 }
 
+/** Find the semesters the student has registrations in, so Plan can list them all.
+ *  Walks the term list newest to oldest, one request at a time, and stops once it has
+ *  found some and then run into three empty terms in a row (nobody registers before
+ *  they enrol), or after a dozen terms with nothing found. Runs once per session. */
+export async function discoverTerms() {
+    if (state.discovery.status !== 'idle') return;
+    set({ discovery: { status: 'running', checked: 0 } });
+    const codes = state.terms.map((t) => String(t.code)).sort((a, b) => Number(b) - Number(a));
+    let found = false;
+    let empties = 0;
+    let checked = 0;
+    for (const t of codes) {
+        if (state.registered[t]?.status !== 'ok') await loadRegistered(t);
+        checked++;
+        set({ discovery: { status: 'running', checked } });
+        const has = (state.registered[t]?.rows || []).some((r) => !r.dropped);
+        if (has) { found = true; empties = 0; } else if (found) empties++;
+        if (found && empties >= 3) break;
+        if (!found && checked >= 12) break;
+        if (state.auth === 'out') break;
+    }
+    set({ discovery: { status: 'done', checked } });
+}
+
 // --- home page -----------------------------------------------------------------------
 
 const smallest = (codes) => codes.map(String).sort((a, b) => Number(a) - Number(b))[0] || null;
 
 const fatal = (e) => e.name === 'SessionExpired' || e.name === 'SessionPoisoned';
-
-// UC Merced's term codes are the calendar year plus 10 (spring), 20 (summer) or 30 (fall).
-const calendarTerm = (d = new Date()) =>
-    `${d.getFullYear()}${d.getMonth() < 5 ? '10' : d.getMonth() < 8 ? '20' : '30'}`;
 
 let openTermsReady = Promise.resolve();
 

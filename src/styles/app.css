@@ -254,3 +254,17 @@ input[type='number'].field { width: 90px; }
 .gen-meta { font-size: var(--label-01-size); color: var(--text-secondary); }
 .gen-crns { display: flex; flex-wrap: wrap; gap: var(--spacing-02); }
 .gen-card .button-primary { align-self: flex-start; }
+
+/* --- plan: semester list and schedule subpage -------------------------------- */
+.term-card { margin: 0 var(--spacing-05) var(--spacing-05); background: var(--layer-01); border: 1px solid var(--border-subtle); }
+.term-head { display: flex; align-items: center; gap: var(--spacing-04); padding: var(--spacing-04) var(--spacing-05); border-bottom: 1px solid var(--border-subtle); }
+.term-title { font-size: var(--heading-03-size); line-height: var(--heading-03-height); font-weight: 400; margin: 0; }
+.term-action { margin-left: auto; text-decoration: none; height: 32px; }
+.term-add { padding: var(--spacing-03) var(--spacing-05); }
+.tag-term-current { background: var(--green-10); color: #0e6027; }
+.tag-term-upcoming { background: var(--blue-10); color: var(--blue-70); }
+.tag-term-past { background: var(--gray-20); color: var(--text-secondary); }
+.toolbar-title { font-size: var(--heading-03-size); font-weight: 400; margin: 0; }
+.lecture-setting { min-width: 150px; height: 28px; }
+a.button-primary { display: inline-flex; align-items: center; text-decoration: none; }
+a.button-ghost { display: inline-flex; align-items: center; text-decoration: none; }

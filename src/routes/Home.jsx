@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useStore, setTicketOverride, loadHome } from '../lib/store.js';
 import { SIGN_IN_URL, beginSignIn } from '../lib/signin.js';
-import { buildBlocks, scheduleSvg } from '../lib/schedule.js';
+import { buildBlocks, isSoft, scheduleSvg } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { shortType } from '../lib/schedule.js';
 import { ScheduleSvg, termName, useNow } from './shared.jsx';
@@ -51,7 +51,7 @@ function CurrentSchedule({ term, terms, rows, catalog, settings, loading }) {
     const ready = !!catalog || rows.some((r) => r.meetingsFaculty.length);
     const svg = useMemo(() => {
         const secs = sectionsForRows(rows.filter((r) => r.term === term), catalog);
-        return scheduleSvg(buildBlocks(secs, 'registered', settings.buildingScheme).blocks, settings);
+        return scheduleSvg(buildBlocks(secs, 'registered', settings.buildingScheme, (s) => isSoft(s, settings)).blocks, settings);
     }, [term, rows, catalog, settings]);
 
     return (

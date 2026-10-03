@@ -30,6 +30,12 @@ assert.equal(buildingName({ building: 'ADMIN' }, 'common'), 'Admin');
 assert.equal(buildingName({}, 'common'), 'None');
 assert.equal(buildingName({ building: 'ACS', buildingDescription: 'Arts &amp; Computational Sciences' }, 'banner'), 'Arts & Computational Sciences');
 assert.equal(locationLabel({ building: 'COB2', room: '170' }), 'COB2, Room 170');
+assert.equal(locationLabel({ building: 'REMOTE', buildingDescription: 'Remote Instruction', room: 'ONLY' }), 'Remote', 'remote has no room');
+assert.equal(locationLabel({ building: 'REMOTE', buildingDescription: 'Remote Instruction', room: 'ONLY' }, 'banner'), 'Remote Instruction');
+// a building under a code the table has never seen is still recognised by its description
+assert.equal(buildingName({ building: 'RUIZ', buildingDescription: 'Ruiz Administration Building' }, 'common'), 'Admin');
+assert.equal(locationLabel({ building: 'RUIZ', buildingDescription: 'Ruiz Administration Building', room: '353' }), 'Admin, Room 353');
+assert.equal(buildingName({ building: 'XYZ', buildingDescription: 'Somewhere New' }, 'common'), 'Somewhere New');
 
 assert.equal(findDateTime('begins 11/12/2026 9:00 AM').getHours(), 9);
 assert.deepEqual(parseCourseInput('me 1'), { key: 'ME001', subject: 'ME', number: '001' });

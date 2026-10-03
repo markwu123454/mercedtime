@@ -5,20 +5,26 @@ import { SIGN_IN_URL, beginSignIn } from './lib/signin.js';
 import Home from './routes/Home.jsx';
 import Search from './routes/Search.jsx';
 import Schedule from './routes/Schedule.jsx';
+import PlanSchedule from './routes/PlanSchedule.jsx';
 import Standing from './routes/Standing.jsx';
 import Plan from './routes/Plan.jsx';
 import History from './routes/History.jsx';
 
 // Six flat routes, no params, no nesting — react-router would be more moving parts
 // than this needs. Swap it in the moment a route grows parameters.
+// #/plan/schedule/202710 is route 'plan' with args ['schedule', '202710'].
+const parseHash = (fallback) => {
+    const [route, ...args] = (location.hash.slice(2) || fallback).split('/');
+    return { route: route || fallback, args };
+};
 function useHashRoute(fallback = 'home') {
-    const [route, setRoute] = useState(() => location.hash.slice(2) || fallback);
+    const [parsed, setParsed] = useState(() => parseHash(fallback));
     useEffect(() => {
-        const on = () => setRoute(location.hash.slice(2) || fallback);
+        const on = () => setParsed(parseHash(fallback));
         addEventListener('hashchange', on);
         return () => removeEventListener('hashchange', on);
     }, [fallback]);
-    return route;
+    return parsed;
 }
 
 const TABS = [
@@ -31,7 +37,7 @@ const TABS = [
 ];
 
 export default function App() {
-    const route = useHashRoute();
+    const { route, args } = useHashRoute();
     useEffect(() => setRoute(route), [route]);
     const { auth, notifications } = useStore((s) => s);
 
@@ -60,7 +66,7 @@ export default function App() {
             <Notifications items={notifications} />
 
             {route === 'search' ? <Search />
-                : route === 'plan' ? <Plan />
+                : route === 'plan' ? (args[0] === 'schedule' ? <PlanSchedule term={args[1]} /> : <Plan />)
                 : route === 'schedule' ? <Schedule />
                 : route === 'standing' ? <Standing />
                 : route === 'history' ? <History />

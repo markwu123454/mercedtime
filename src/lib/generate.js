@@ -28,10 +28,13 @@ export function courseChoices(sections) {
     return out;
 }
 
-/** Timed weekly meetings. A section with none (TBA, online) cannot clash with anything. */
-export const meetingsOf = (sections) => sections.flatMap((s) =>
+/** Timed weekly meetings. A section with none (TBA, online) cannot clash with anything.
+ *  `soft(section)` marks a meeting the student might skip (a lecture). */
+export const meetingsOf = (sections, soft = () => false) => sections.flatMap((s) =>
     classMeetings(s).filter((m) => m.beginTime && m.endTime).flatMap((m) =>
-        DAYS.flatMap(([key], day) => (m[key] ? [{ day, start: toMin(m.beginTime), end: toMin(m.endTime) }] : []))));
+        DAYS.flatMap(([key], day) => (m[key]
+            ? [{ day, start: toMin(m.beginTime), end: toMin(m.endTime), soft: !!soft(s) }]
+            : []))));
 
 const clash = (a, b, gap) => a.day === b.day && a.start < b.end + gap && b.start < a.end + gap;
 
@@ -42,9 +45,16 @@ export const DEFAULT_FILTERS = {
     daysOff: [],           // day indexes (0 = Mon) with no classes at all
     gap: 0,                // minimum minutes between two classes on the same day
     openOnly: false,       // skip full sections
+    // Skippable lectures (see isSoft): when on, they stop counting as days on campus,
+    // as gaps, and against the start/end/days-off filters. allowSoftClash additionally
+    // lets one overlap another class, on the assumption that you would skip it.
+    skipLectures: false,
+    allowSoftClash: false,
 };
 
-function metrics(meetings) {
+function metrics(all, skip) {
+    // Meetings that count: with skipLectures a skippable lecture does not.
+    const meetings = skip ? all.filter((m) => !m.soft) : all;
     const days = new Map();
     for (const m of meetings) {
         if (!days.has(m.day)) days.set(m.day, []);
@@ -55,8 +65,13 @@ function metrics(meetings) {
         list.sort((a, b) => a.start - b.start);
         for (let i = 1; i < list.length; i++) gaps += Math.max(0, list[i].start - list[i - 1].end);
     }
+    const lectureOnlyDays = skip
+        ? new Set(all.filter((m) => m.soft && !days.has(m.day)).map((m) => m.day)).size
+        : 0;
     return {
         days: days.size,
+        lectureOnlyDays,
+        skippable: skip ? all.filter((m) => m.soft).length : 0,
         gaps,
         earliest: meetings.length ? Math.min(...meetings.map((m) => m.start)) : 0,
         latest: meetings.length ? Math.max(...meetings.map((m) => m.end)) : 0,
@@ -75,26 +90,31 @@ const SORTS = {
  *  courses: [{ key, label, sections, require?: [crn] }]  sections of the term for that
  *           course; `require` limits it to bundles containing those CRNs.
  *  fixed:   sections already taken (registered). They block time and appear in no choice.
+ *  isSoft:  (section) => bool, which lectures count as skippable when filters.skipLectures.
  *
  *  Returns { results, total, truncated, blocked }. `blocked` lists courses with no
  *  section that fits the filters on its own, which makes any schedule impossible.
  *  Schedules identical in time and instructor are collapsed into one with a count of
  *  `alternatives`; `truncated` means a cap stopped the search before it finished. */
-export function generateSchedules({ courses, fixed = [], filters = {}, keep = 300, cap = 20000, maxNodes = 400000 }) {
+export function generateSchedules({ courses, fixed = [], filters = {}, isSoft = () => false, keep = 300, cap = 20000, maxNodes = 400000 }) {
     const f = { ...DEFAULT_FILTERS, ...filters };
     const off = new Set(f.daysOff);
+    const soft = f.skipLectures ? isSoft : () => false;
+    // A skippable lecture is exempt from the time-of-day and days-off filters.
+    const counts = (m) => !(f.skipLectures && m.soft);
+    const clashes = (a, b, gap) => clash(a, b, gap) && !(f.allowSoftClash && f.skipLectures && (a.soft || b.soft));
 
     const fits = (sections, meetings) =>
-        meetings.every((m) => m.start >= f.earliest && m.end <= f.latest && !off.has(m.day))
+        meetings.every((m) => !counts(m) || (m.start >= f.earliest && m.end <= f.latest && !off.has(m.day)))
         && (!f.openOnly || sections.every((s) => tierOf(s) !== 'full'))
         // a lecture that overlaps its own lab is not a real option
-        && !meetings.some((a, i) => meetings.slice(i + 1).some((b) => clash(a, b, 0)));
+        && !meetings.some((a, i) => meetings.slice(i + 1).some((b) => clashes(a, b, 0)));
 
     const options = courses.map((c) => ({
         ...c,
         choices: courseChoices(c.sections)
             .filter((sections) => !c.require?.length || c.require.every((crn) => sections.some((s) => s.courseReferenceNumber === crn)))
-            .map((sections) => ({ sections, meetings: meetingsOf(sections) }))
+            .map((sections) => ({ sections, meetings: meetingsOf(sections, soft) }))
             .filter((ch) => fits(ch.sections, ch.meetings)),
     }));
 
@@ -102,7 +122,7 @@ export function generateSchedules({ courses, fixed = [], filters = {}, keep = 30
     if (blocked.length) return { results: [], total: 0, truncated: false, blocked };
 
     options.sort((a, b) => a.choices.length - b.choices.length);   // fewest options first: prune early
-    const fixedMeetings = meetingsOf(fixed);
+    const fixedMeetings = meetingsOf(fixed, soft);
     const placed = [...fixedMeetings];
     const picks = [];
     const seen = new Map();
@@ -123,12 +143,12 @@ export function generateSchedules({ courses, fixed = [], filters = {}, keep = 30
             seen.set(sig, {
                 sections: picks.flatMap((ch) => ch.sections),
                 alternatives: 0,
-                ...metrics(placed),
+                ...metrics(placed, f.skipLectures),
             });
             return;
         }
         for (const ch of options[i].choices) {
-            if (ch.meetings.some((m) => placed.some((p) => clash(m, p, f.gap)))) continue;
+            if (ch.meetings.some((m) => placed.some((p) => clashes(m, p, f.gap)))) continue;
             placed.push(...ch.meetings);
             picks.push(ch);
             walk(i + 1);

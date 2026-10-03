@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useStore, loadRegistered, updateSettings } from '../lib/store.js';
-import { buildBlocks, scheduleSvg } from '../lib/schedule.js';
+import { buildBlocks, isSoft, scheduleSvg } from '../lib/schedule.js';
 import { BUILDING_SCHEMES } from '../lib/buildings.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { ScheduleSvg, TermSelect, downloadText, termName, minsToInput, inputToMins } from './shared.jsx';
@@ -20,8 +20,9 @@ export default function Schedule() {
             ? sections.filter((s) => wanted.has(s.courseReferenceNumber) && !regCrns.has(s.courseReferenceNumber))
             : [];
 
-        const reg = buildBlocks(regSecs, 'registered', settings.buildingScheme);
-        const plan = buildBlocks(planSecs, 'planned', settings.buildingScheme);
+        const soft = (s) => isSoft(s, settings);
+        const reg = buildBlocks(regSecs, 'registered', settings.buildingScheme, soft);
+        const plan = buildBlocks(planSecs, 'planned', settings.buildingScheme, soft);
         // A planned CRN the term's catalog does not contain (typically a future term
         // whose classes are not published yet) has nothing to draw.
         const known = new Set(sections.map((s) => s.courseReferenceNumber));
@@ -80,6 +81,13 @@ export default function Schedule() {
                     </div>
 
                     <div className="detail-section">
+                        <label className="checkbox" title="Lectures rarely take attendance. A skippable lecture is drawn dashed, and a day with only those is marked optional. Each course can override this on its plan page.">
+                            <input type="checkbox" checked={settings.softLectures} onChange={(e) => set({ softLectures: e.target.checked })} />
+                            Lectures are skippable
+                        </label>
+                    </div>
+
+                    <div className="detail-section">
                         <label className="checkbox">
                             <input type="checkbox" checked={settings.showFree} onChange={(e) => set({ showFree: e.target.checked })} />
                             Show free times
@@ -87,6 +95,12 @@ export default function Schedule() {
                     </div>
 
                     <fieldset className="settings-group" disabled={!settings.showFree}>
+                        <div className="detail-section">
+                            <label className="checkbox">
+                                <input type="checkbox" checked={settings.softAsFree} onChange={(e) => set({ softAsFree: e.target.checked })} />
+                                Free time ignores skippable lectures
+                            </label>
+                        </div>
                         <div className="detail-section">
                             <div className="detail-label">Free from</div>
                             <input className="field" type="time" value={minsToInput(settings.freeStart)}

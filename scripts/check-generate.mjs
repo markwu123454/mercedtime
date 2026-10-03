@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { generateSchedules, meetingsOf, courseChoices } from '../src/lib/generate.js';
+import { isSoft, DEFAULT_SETTINGS, buildBlocks, scheduleSvg } from '../src/lib/schedule.js';
 
 const sec = (key, crn, days, begin, end, extra = {}) => {
     const dayKeys = { M: 'monday', T: 'tuesday', W: 'wednesday', R: 'thursday', F: 'friday' };
@@ -57,6 +58,45 @@ const byGaps = generateSchedules({ courses: [course('AA001', A), course('BB001',
 assert.deepEqual(byGaps.results.map(crns), ['a2,b1', 'a1,b1'], 'less time between classes ranks first');
 const late = generateSchedules({ courses: [course('AA001', A), course('BB001', Bc)], filters: { sort: 'late' } });
 assert.deepEqual(late.results.map(crns), ['a2,b1', 'a1,b1'], 'latest start ranks first');
+
+// --- skippable lectures -----------------------------------------------------------------
+const LEC = { scheduleTypeDescription: 'Lecture' };
+const LAB = { scheduleTypeDescription: 'Laboratory Skills/Techniques' };
+const P = [
+    sec('PP001', 'pl', 'M', '1000', '1100', { ...LEC, linkIdentifier: 'A1' }),
+    sec('PP001', 'pb', 'T', '1300', '1500', { ...LAB, linkIdentifier: 'B1', sequenceNumber: '01L' }),
+];
+const soft = (s) => isSoft(s, DEFAULT_SETTINGS);
+let pr = generateSchedules({ courses: [course('PP001', P)], isSoft: soft });
+assert.equal(pr.results[0].days, 2, 'by default a lecture is a day on campus');
+pr = generateSchedules({ courses: [course('PP001', P)], isSoft: soft, filters: { skipLectures: true } });
+assert.equal(pr.results[0].days, 1, 'skipping the Monday lecture leaves one day on campus');
+assert.equal(pr.results[0].lectureOnlyDays, 1);
+assert.equal(pr.results[0].skippable, 1);
+assert.equal(generateSchedules({ courses: [course('PP001', P)], isSoft: soft, filters: { daysOff: [0] } }).blocked.length, 1, 'Monday off fails while the lecture counts');
+pr = generateSchedules({ courses: [course('PP001', P)], isSoft: soft, filters: { daysOff: [0], skipLectures: true } });
+assert.equal(pr.total, 1, 'Monday can be off when its only class is a lecture you would skip');
+
+const Q = [sec('QQ001', 'q1', 'M', '1030', '1130', LAB)];
+const clashing = [course('PP001', [P[0]]), course('QQ001', Q)];
+assert.equal(generateSchedules({ courses: clashing, isSoft: soft, filters: { skipLectures: true } }).total, 0, 'skipping alone does not allow an overlap');
+assert.equal(generateSchedules({ courses: clashing, isSoft: soft, filters: { skipLectures: true, allowSoftClash: true } }).total, 1, 'a lecture may overlap another class when you would skip it');
+assert.equal(generateSchedules({ courses: [course('QQ001', Q), course('RR001', [sec('RR001', 'r1', 'M', '1030', '1130', LAB)])], isSoft: soft, filters: { skipLectures: true, allowSoftClash: true } }).total, 0, 'two required classes still clash');
+
+// which sections count as skippable
+const disc = sec('PP001', 'pd', 'W', '1000', '1100', { scheduleTypeDescription: 'Lecture-Supplem Act (Discuss)' });
+assert.equal(isSoft(P[0], DEFAULT_SETTINGS), true);
+assert.equal(isSoft(P[1], DEFAULT_SETTINGS), false, 'a lab takes attendance');
+assert.equal(isSoft(disc, DEFAULT_SETTINGS), false, 'so does a discussion');
+assert.equal(isSoft(P[0], { ...DEFAULT_SETTINGS, softLectures: false }), false);
+assert.equal(isSoft(P[0], { ...DEFAULT_SETTINGS, softLectures: false, softOverride: { PP001: true } }), true, 'a course can opt in');
+assert.equal(isSoft(P[0], { ...DEFAULT_SETTINGS, softOverride: { PP001: false } }), false, 'or out');
+
+// the drawing marks them
+const svg = scheduleSvg(buildBlocks(P, 'registered', 'common', soft).blocks, { ...DEFAULT_SETTINGS, showFree: false });
+assert.ok(svg.includes('Mon (optional)'), 'a lectures-only day is labelled optional');
+assert.ok(!svg.includes('Tue (optional)'), 'a day with a lab is not');
+assert.ok(svg.includes('Skippable lecture'), 'the legend explains the dashed box');
 
 // --- real courses ---------------------------------------------------------------------
 const rows = JSON.parse(fs.readFileSync(new URL('../fixtures/sections-202630.json', import.meta.url), 'utf8'))['202630'];

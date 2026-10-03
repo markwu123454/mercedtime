@@ -21,6 +21,12 @@ export const DEFAULT_SETTINGS = {
     padAfter: 15,
     minFree: 60,             // shorter gaps are not worth drawing
     includePlanned: true,
+    // Lectures rarely take attendance, so some students drop them and a day that held
+    // only lectures stops being a day on campus. A lecture is "skippable" when its
+    // course says so (softOverride[courseKey] true/false), else when this is on.
+    softLectures: true,
+    softAsFree: false,       // draw the free-time boxes as if skippable lectures were not there
+    softOverride: {},
 };
 
 /** "0930" -> 570 */
@@ -48,9 +54,17 @@ export function shortType(desc) {
     return d.split(/[\s-]/)[0] || '';
 }
 
+/** Is this section's lecture one the student might skip? Only the lecture component
+ *  can be: labs, discussions and seminars take attendance. */
+export function isSoft(sec, settings = DEFAULT_SETTINGS) {
+    if (shortType(sec.scheduleTypeDescription) !== 'Lecture') return false;
+    const o = settings.softOverride?.[courseKey(sec)];
+    return o === undefined ? !!settings.softLectures : !!o;
+}
+
 /** One block per section meeting per weekday. `kind` is 'registered' or 'planned'.
  *  Meetings without a clock time (TBA) cannot be placed; they come back separately. */
-export function buildBlocks(sections, kind, scheme = 'common') {
+export function buildBlocks(sections, kind, scheme = 'common', soft = () => false) {
     const blocks = [];
     const unplaced = [];
     for (const sec of sections) {
@@ -70,6 +84,7 @@ export function buildBlocks(sections, kind, scheme = 'common') {
                 blocks.push({
                     day: i, start, end, kind, code, type,
                     loc: locationLabel(mt, scheme), crn: sec.courseReferenceNumber, key: courseKey(sec),
+                    soft: !!soft(sec),
                 });
             }
         }
@@ -134,6 +149,9 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const STYLE = {
     registered: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af', dash: '' },
     planned: { fill: '#fef3c7', stroke: '#f59e0b', text: '#92400e', dash: ' stroke-dasharray="4 3"' },
+    // skippable lectures: the same colours, lighter, with a tighter dash
+    registeredSoft: { fill: '#eff6ff', stroke: '#93c5fd', text: '#3b6fb6', dash: ' stroke-dasharray="2 2"' },
+    plannedSoft: { fill: '#fffbeb', stroke: '#fcd34d', text: '#a16207', dash: ' stroke-dasharray="2 2"' },
     free: { fill: '#dcfce7', stroke: '#22c55e', text: '#15803d' },
 };
 
@@ -151,7 +169,10 @@ export function scheduleSvg(inputBlocks, settings = DEFAULT_SETTINGS) {
     const used = blocks.map((b) => b.day);
     const lastDay = Math.max(4, ...used);               // Mon-Fri, plus the weekend only when needed
     const days = Array.from({ length: lastDay + 1 }, (_, i) => i);
-    const free = settings.showFree ? freeTimes(blocks, days, settings) : [];
+    // With softAsFree, a lecture the student would skip does not take up free time.
+    const free = settings.showFree
+        ? freeTimes(settings.softAsFree ? blocks.filter((b) => !b.soft) : blocks, days, settings)
+        : [];
 
     // The grid shows 8am-8pm and stretches to hold anything outside that.
     let h0 = 8, h1 = 20;
@@ -168,7 +189,10 @@ export function scheduleSvg(inputBlocks, settings = DEFAULT_SETTINGS) {
     o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">`);
     o.push(`<rect width="${W}" height="${H}" fill="#ffffff"/>`);
     for (const d of days) {
-        o.push(`<text x="${LEFT + DAYW * d + DAYW / 2}" y="20" text-anchor="middle" font-size="13" font-weight="bold" fill="#374151">${DAYS[d][1]}</text>`);
+        // A day holding only skippable lectures is marked: it may not be a school day.
+        const here = blocks.filter((b) => b.day === d);
+        const optional = here.length > 0 && here.every((b) => b.soft);
+        o.push(`<text x="${LEFT + DAYW * d + DAYW / 2}" y="20" text-anchor="middle" font-size="13" font-weight="bold" fill="${optional ? '#6b7280' : '#374151'}">${DAYS[d][1]}${optional ? ' (optional)' : ''}</text>`);
     }
     o.push(`<rect x="${LEFT}" y="${TOP}" width="${W - LEFT}" height="${plotH}" fill="none" stroke="#e5e7eb"/>`);
     for (let k = 1; k < h1 - h0; k++) o.push(`<line x1="${LEFT}" y1="${TOP + HOUR * k}" x2="${W}" y2="${TOP + HOUR * k}" stroke="#e5e7eb"/>`);
@@ -185,7 +209,7 @@ export function scheduleSvg(inputBlocks, settings = DEFAULT_SETTINGS) {
         if (gh >= 16) o.push(`<text x="${gx + (DAYW - 6) / 2}" y="${Math.round(gy + gh / 2 + 3.5)}" font-size="11" fill="${f.text}" text-anchor="middle">${range(g.start, g.end)}</text>`);
     }
     for (const b of blocks) {
-        const s = STYLE[b.kind] || STYLE.registered;
+        const s = STYLE[`${b.kind}${b.soft ? 'Soft' : ''}`] || STYLE.registered;
         const laneW = (DAYW - 6) / b.lanes;
         const bx = LEFT + DAYW * b.day + 3 + b.lane * laneW;
         const by = Math.round(y(b.start)), bh = Math.round(((b.end - b.start) * HOUR) / 60);
@@ -205,13 +229,15 @@ export function scheduleSvg(inputBlocks, settings = DEFAULT_SETTINGS) {
 
     const legend = [['registered', 'Class']];
     if (blocks.some((b) => b.kind === 'planned')) legend.push(['planned', 'Planned']);
+    if (blocks.some((b) => b.soft)) legend.push([blocks.some((b) => b.soft && b.kind === 'registered') || !blocks.some((b) => b.soft && b.kind === 'planned') ? 'registeredSoft' : 'plannedSoft', 'Skippable lecture']);
     if (settings.showFree) legend.push(['free', 'Free time']);
-    legend.forEach(([kind, label], i) => {
+    let lx = LEFT;
+    for (const [kind, label] of legend) {
         const s = STYLE[kind];
-        const x = LEFT + i * 90;
-        o.push(`<rect x="${x}" y="${legendY}" width="12" height="12" fill="${s.fill}" stroke="${s.stroke}"${s.dash || ''}/>`);
-        o.push(`<text x="${x + 18}" y="${legendY + 10}" font-size="12" fill="#374151">${label}</text>`);
-    });
+        o.push(`<rect x="${lx}" y="${legendY}" width="12" height="12" fill="${s.fill}" stroke="${s.stroke}"${s.dash || ''}/>`);
+        o.push(`<text x="${lx + 18}" y="${legendY + 10}" font-size="12" fill="#374151">${label}</text>`);
+        lx += Math.max(90, 18 + label.length * 6.8 + 22);
+    }
     o.push('</svg>');
     return o.join('\n');
 }

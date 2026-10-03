@@ -27,6 +27,26 @@ export const BUILDING_SCHEMES = [
     ['banner', 'Banner names'],
 ];
 
+// Banner is not consistent about a building's code ("Ruiz Administration" turned up
+// under a code that is not ADMIN), but its description is stable, so the description is
+// matched too. The first pattern that matches wins.
+const BY_DESCRIPTION = [
+    [/remote/i, 'Remote'],
+    [/administration|^admin\b/i, 'Admin'],
+    [/classroom and office 1/i, 'COB1'],
+    [/classroom and office 2/i, 'COB2'],
+    [/library/i, 'Library'],
+    [/science and engineering 1/i, 'SE1'],
+    [/science and engineering 2/i, 'SE2'],
+    [/arts\s*(&|and)\s*computational/i, 'ACS'],
+    [/student services/i, 'SSB'],
+    [/granite/i, 'Granite'],
+    [/glacier/i, 'Glacier'],
+    [/social sciences/i, 'SSM'],
+    [/sustainability research/i, 'SRE'],
+    [/biomedical/i, 'BSP'],
+];
+
 // Banner's descriptions arrive HTML-escaped ("Arts &amp; Computational Sciences").
 const decode = (s) => String(s ?? '')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -37,14 +57,20 @@ export function buildingName(mt, scheme = 'common') {
     const code = mt.building;
     if (scheme === 'common') {
         if (!code) return COMMON.NONE;
-        return COMMON[code] || decode(mt.buildingDescription) || code;
+        if (COMMON[code]) return COMMON[code];
+        const desc = decode(mt.buildingDescription);
+        return BY_DESCRIPTION.find(([re]) => re.test(desc))?.[1] || desc || code;
     }
     return decode(mt.buildingDescription) || code || '';
 }
 
+/** Remote instruction has no room; Banner fills the room field with filler ("ONLY"). */
+export const isRemote = (mt) => mt.building === 'REMOTE' || /remote/i.test(mt.buildingDescription || '');
+
 /** "COB2, Room 170". Long names switch to "Rm" so the label still fits a day column. */
 export function locationLabel(mt, scheme = 'common') {
     const name = buildingName(mt, scheme);
+    if (isRemote(mt)) return name;
     if (!name) return mt.room ? `Room ${mt.room}` : '';
     if (!mt.room) return name;
     const full = `${name}, Room ${mt.room}`;

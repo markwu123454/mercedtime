@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { applySchedule } from '../lib/store.js';
 import { courseKey } from '../lib/sections.js';
 import { DEFAULT_FILTERS, generateSchedules } from '../lib/generate.js';
-import { buildBlocks, range, scheduleSvg, shortType, DAYS } from '../lib/schedule.js';
+import { buildBlocks, isSoft, range, scheduleSvg, shortType, DAYS } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { ScheduleSvg, minsToInput, inputToMins } from './shared.jsx';
 
@@ -12,7 +12,7 @@ const hm = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : '
 // Every schedule that fits the planned courses without a clash, ranked, for the user
 // to pick one. Picking writes the schedule's CRNs into the plan.
 export default function Generator({ term, items, taken, sections, settings }) {
-    const [f, setF] = useState({ ...DEFAULT_FILTERS, gap: 15 });
+    const [f, setF] = useState({ ...DEFAULT_FILTERS, gap: 15, skipLectures: !!settings.softLectures });
     const [keepPicked, setKeepPicked] = useState(false);
     const [shown, setShown] = useState(PAGE);
     const patch = (p) => setF((cur) => ({ ...cur, ...p }));
@@ -32,18 +32,20 @@ export default function Generator({ term, items, taken, sections, settings }) {
         return { courses, skipped };
     }, [items, taken, sections, keepPicked]);
 
+    const soft = useMemo(() => (s) => isSoft(s, settings), [settings]);
     const out = useMemo(
-        () => (courses.length ? generateSchedules({ courses, fixed, filters: f }) : null),
-        [courses, fixed, f]);
+        () => (courses.length ? generateSchedules({ courses, fixed, filters: f, isSoft: soft }) : null),
+        [courses, fixed, f, soft]);
     useEffect(() => setShown(PAGE), [out]);
 
     const cards = useMemo(() => (out?.results || []).slice(0, shown).map((r) => {
+        const mark = f.skipLectures ? soft : undefined;
         const blocks = [
-            ...buildBlocks(fixed, 'registered', settings.buildingScheme).blocks,
-            ...buildBlocks(r.sections, 'planned', settings.buildingScheme).blocks,
+            ...buildBlocks(fixed, 'registered', settings.buildingScheme, mark).blocks,
+            ...buildBlocks(r.sections, 'planned', settings.buildingScheme, mark).blocks,
         ];
         return { ...r, svg: scheduleSvg(blocks, { ...settings, showFree: false }) };
-    }), [out, shown, fixed, settings]);
+    }), [out, shown, fixed, settings, f.skipLectures, soft]);
 
     return (
         <section className="generator">
@@ -88,6 +90,14 @@ export default function Generator({ term, items, taken, sections, settings }) {
                     <input type="checkbox" checked={keepPicked} onChange={(e) => setKeepPicked(e.target.checked)} />
                     Keep sections I already picked
                 </label>
+                <label className="checkbox" title="Lectures that take no attendance do not count as days on campus, as gaps, or against the time and days-off filters">
+                    <input type="checkbox" checked={f.skipLectures} onChange={(e) => patch({ skipLectures: e.target.checked, allowSoftClash: e.target.checked && f.allowSoftClash })} />
+                    I might skip lectures
+                </label>
+                <label className="checkbox" title="Assume you would skip the lecture when it overlaps another class">
+                    <input type="checkbox" checked={f.allowSoftClash} disabled={!f.skipLectures} onChange={(e) => patch({ allowSoftClash: e.target.checked })} />
+                    Let a skippable lecture overlap another class
+                </label>
             </div>
 
             {skipped.length > 0 && (
@@ -110,7 +120,9 @@ export default function Generator({ term, items, taken, sections, settings }) {
                     <div key={i} className="gen-card">
                         <ScheduleSvg svg={r.svg} />
                         <div className="gen-meta">
-                            {r.days} day{r.days === 1 ? '' : 's'} · {r.gaps ? `${hm(r.gaps)} between classes` : 'no gaps'} · {range(r.earliest, r.latest)}
+                            {r.days} day{r.days === 1 ? '' : 's'}
+                            {r.lectureOnlyDays > 0 && ` (+${r.lectureOnlyDays} lecture-only)`}
+                            {' · '}{r.gaps ? `${hm(r.gaps)} between classes` : 'no gaps'} · {range(r.earliest, r.latest)}
                             {r.alternatives > 0 && ` · ${r.alternatives} equivalent`}
                         </div>
                         <div className="gen-crns">

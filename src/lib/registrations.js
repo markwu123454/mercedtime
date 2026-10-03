@@ -54,3 +54,7 @@ export function sectionsForRows(rows, catalog = []) {
         meetingsFaculty: r.meetingsFaculty,
     }));
 }
+
+// UC Merced's term codes are the calendar year plus 10 (spring), 20 (summer) or 30 (fall).
+export const calendarTerm = (d = new Date()) =>
+    `${d.getFullYear()}${d.getMonth() < 5 ? '10' : d.getMonth() < 8 ? '20' : '30'}`;
