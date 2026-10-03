@@ -40,9 +40,14 @@
     font-family: 'Bebas Neue', 'Arial Narrow', Impact, sans-serif;
     font-size: 30px; line-height: 1; letter-spacing: 0.5px;
     text-transform: uppercase; font-weight: 400;
-    padding-top: 3px;      /* the face sits high in its box */
     text-decoration: none;
+    /* Full bar height so the current-page underline sits on the bar's edge like the tabs'. */
+    display: flex; align-items: center; height: 100%; box-sizing: border-box;
+    padding: 6px 4px 0;     /* top padding: the face sits high in its box */
+    margin-left: -4px;
+    border-bottom: 3px solid transparent;
 }
+.masthead-brand[aria-current='page'] { border-bottom-color: var(--blue-60); }
 .brand-merced { color: var(--brand-blue); }
 .brand-time { color: var(--brand-gold); }
 .masthead-spacer { margin-left: auto; }
