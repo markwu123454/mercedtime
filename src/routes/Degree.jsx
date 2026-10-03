@@ -58,7 +58,7 @@ export default function Degree() {
     };
 
     return (
-        <div className="page-scroll">
+        <>
             <div className="toolbar">
                 <button className="button-ghost" onClick={() => loadDegree({ force: true })} disabled={status === 'loading'}>Refresh</button>
                 <button className="button-ghost" onClick={run} disabled={degree.running}>Run a new audit</button>
@@ -78,6 +78,7 @@ export default function Degree() {
                 </div>
             )}
 
+            <div className="page-scroll">
             {status === 'signed-out' && (
                 <div className="status status-error">
                     Sign in to uAchieve to read your degree audit.{' '}
@@ -107,7 +108,8 @@ export default function Degree() {
                     {tab === 'history' && <History rows={history} />}
                 </>
             )}
-        </div>
+            </div>
+        </>
     );
 }
 
@@ -181,8 +183,8 @@ function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys }) {
             {node.courses.length > 0 && (
                 <div className="applied">
                     {node.courses.map((c, i) => (
-                        <span key={i} className={`chip chip-done${c.inProgress ? ' chip-ip' : ''}`} title={`${c.description}${c.term ? ` · ${c.term}` : ''}`}>
-                            {c.course}{c.grade ? ` ${c.grade}` : ''}
+                        <span key={i} className={`chip chip-done${c.inProgress ? ' chip-ip' : ''}`} title={[c.description, c.term, c.grade && `Grade ${c.grade}`].filter(Boolean).join(' · ')}>
+                            {c.course}
                         </span>
                     ))}
                 </div>
