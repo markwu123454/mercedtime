@@ -288,3 +288,15 @@ a.button-ghost { display: inline-flex; align-items: center; text-decoration: non
 .seat-status { margin-left: auto; color: var(--text-secondary); font-size: var(--label-01-size); }
 .seat-status + .count { margin-left: var(--spacing-05); }
 .term-add { flex-wrap: wrap; }
+
+/* --- standing ------------------------------------------------------------------ */
+.standing { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--spacing-05); padding: var(--spacing-05); align-items: start; }
+.standing-message { border-left: 3px solid var(--support-info); background: var(--notification-info-bg); padding: var(--spacing-03) var(--spacing-04); margin-bottom: var(--spacing-03); }
+.standing-message p { margin: 0 0 var(--spacing-02); }
+.standing-success { border-left-color: var(--support-success); background: var(--notification-success-bg); }
+.standing-error { border-left-color: var(--support-error); background: var(--notification-error-bg); }
+.standing-warning { border-left-color: var(--support-warning); background: var(--notification-warning-bg); }
+.curriculum { display: grid; grid-template-columns: max-content 1fr; gap: var(--spacing-02) var(--spacing-05); margin: 0; }
+.curriculum dt { color: var(--text-helper); }
+.curriculum dd { margin: 0; }
+.window-past { text-decoration: line-through; color: var(--text-helper); }

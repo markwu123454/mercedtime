@@ -1,36 +1,73 @@
-import React from 'react';
-import { useStore } from '../lib/store.js';
+import React, { useEffect, useState } from 'react';
+import { useStore, loadTicket } from '../lib/store.js';
+import { BASE } from '../lib/api.js';
+import { ticketState } from '../lib/ticket.js';
+import { termName, useNow } from './shared.jsx';
 
-// Not built yet. Two tiers when it is, because the data has two very different
-// reliability profiles:
-//
-//   Core (JSON, robust) — classRegistration/getTerms returns *only* terms open for
-//   registration, which is itself the answer to "may I register and for what", plus
-//   getOLRStartDate / getOLREndDate for the window. No scraping.
-//
-//   Detail (scraped, fragile) — holds, time ticket, class standing and primary
-//   curriculum live only in prepareRegistration's server-rendered HTML; that page
-//   fires no data XHR at all. api.getRegistrationStatusHTML + banner.parseRegistrationStatus
-//   handle it, and both fail soft so a Banner upgrade degrades this to a link rather
-//   than to a confidently blank card.
+const fmt = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+// May I register, when, and for what: the registration status Banner shows on its
+// Prepare for Registration page, read from that page's HTML (parsePrepareRegistration).
 export default function Standing() {
-    const openTerms = useStore((s) => s.openTerms);
+    const { terms, openTerms, home, tickets } = useStore((s) => s);
+    const now = useNow(1000);
+
+    const choices = [...new Set([home.nextTerm, home.currentTerm, ...openTerms.map((t) => String(t.code))].filter(Boolean))]
+        .sort((a, b) => Number(b) - Number(a));
+    const [term, setTerm] = useState(null);
+    const active = term || home.nextTerm || choices[0] || null;
+
+    useEffect(() => { if (active) loadTicket(active); }, [active]);
+
+    const t = active ? tickets[active] : null;
+    const page = t?.page;
+    const state = ticketState(page?.windows, now);
+
     return (
-        <div className="route-stub">
-            <h2>Standing</h2>
-            <p>Not built yet. This route answers one question: <em>may I register, when, and for what?</em></p>
-            {openTerms.length > 0 && (
-                <p>Open for registration right now: {openTerms.map((t) => t.description).join(', ')}.</p>
+        <div className="page-scroll">
+            <div className="toolbar">
+                <select className="field select-field" value={active || ''} onChange={(e) => setTerm(e.target.value)} aria-label="Term">
+                    {choices.map((c) => <option key={c} value={c}>{termName(terms, c)}</option>)}
+                </select>
+                <button className="button-ghost" onClick={() => loadTicket(active, { force: true })}>Refresh</button>
+                <a className="button-ghost" href={`${BASE}/term/termSelection?mode=preReg`}>Open on Banner &rarr;</a>
+            </div>
+
+            {!active && <p className="placeholder pad">No term to show yet.</p>}
+            {t?.status === 'loading' && !page && <p className="placeholder pad">Loading your registration status…</p>}
+            {t?.status === 'error' && <div className="status status-error">Could not load your registration status. Sign in to Banner and refresh.</div>}
+            {t?.status === 'ok' && !page && <p className="placeholder pad">Banner did not show a registration status for this term.</p>}
+
+            {page && (
+                <div className="standing">
+                    <section className="card">
+                        <h2 className="card-title">Registration status &middot; {page.term || termName(terms, active)}</h2>
+                        {page.messages.map((m, i) => (
+                            <div key={i} className={`standing-message standing-${m.kind}`}>
+                                {m.lines.map((line, j) => <p key={j}>{line}</p>)}
+                            </div>
+                        ))}
+                        {state.kind !== 'unknown' && (
+                            <div className="detail-section">
+                                <div className="detail-label">Registration windows</div>
+                                {page.windows.map((w, i) => (
+                                    <p key={i} className={now >= w.end ? 'window-past' : ''}>{fmt(w.start)} &ndash; {fmt(w.end)}</p>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                    {page.curriculum.length > 0 && (
+                        <section className="card">
+                            <h2 className="card-title">Primary curriculum</h2>
+                            <dl className="curriculum">
+                                {page.curriculum.map((r) => (
+                                    <React.Fragment key={r.label}><dt>{r.label}</dt><dd>{r.value}</dd></React.Fragment>
+                                ))}
+                            </dl>
+                        </section>
+                    )}
+                </div>
             )}
-            <ul>
-                <li>Registration window and time ticket</li>
-                <li>Holds, split into blocking and informational</li>
-                <li>Credit total against min/max hours</li>
-                <li>Primary curriculum</li>
-            </ul>
-            <p>
-                Until then: <a href="/StudentRegistrationSsb/ssb/term/termSelection?mode=preReg">Prepare for Registration</a>
-            </p>
         </div>
     );
 }

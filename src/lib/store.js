@@ -11,7 +11,7 @@ import { courseList, termLabel } from './courses.js';
 import { byCourse } from './generate.js';
 import { DEFAULT_SETTINGS } from './schedule.js';
 import { normalizeRegistration, registrationRows, calendarTerm } from './registrations.js';
-import { parseTimeTicket } from './banner.js';
+import { parsePrepareRegistration } from './banner.js';
 
 const PLAN_KEY = 'mercedtime_plan_v2';
 const TERM_KEY = 'mercedtime_term';
@@ -38,7 +38,7 @@ let state = {
     plan: new Set(),        // CRNs planned for the selected term — drives "My plan" in Find classes
     registered: {},         // { [term]: { status: 'loading' | 'ok' | 'error', rows: [] } }
     home: { status: 'idle', error: null, currentTerm: null, nextTerm: null, activeRows: [] },
-    tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', at: ms | null, text } }
+    tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', page } }; page is parsePrepareRegistration's result, or null
     settings: DEFAULT_SETTINGS,
     discovery: { status: 'idle', checked: 0 },
     cacheMeta: {},          // { [term]: { fetchedAt, count } } for every downloaded catalog
@@ -566,14 +566,16 @@ export async function loadHome() {
     if (nextTerm) loadTicket(nextTerm);
 }
 
-export async function loadTicket(term) {
-    if (state.tickets[term]?.status === 'loading') return;
-    set({ tickets: { ...state.tickets, [term]: { status: 'loading', at: null, text: null } } });
+/** A term's registration status page: time windows, holds, standing, curriculum. */
+export async function loadTicket(term, { force = false } = {}) {
+    const cur = state.tickets[term];
+    if (cur?.status === 'loading' || (cur?.status === 'ok' && !force)) return;
+    set({ tickets: { ...state.tickets, [term]: { status: 'loading', page: cur?.page || null } } });
     try {
-        const { at, text } = parseTimeTicket(await api.getRegistrationStatusHTML(term));
-        set({ tickets: { ...state.tickets, [term]: { status: 'ok', at: at ? at.getTime() : null, text } } });
+        const page = parsePrepareRegistration(await api.getRegistrationStatusHTML(term));
+        set({ tickets: { ...state.tickets, [term]: { status: 'ok', page } } });
     } catch {
-        set({ tickets: { ...state.tickets, [term]: { status: 'error', at: null, text: null } } });
+        set({ tickets: { ...state.tickets, [term]: { status: 'error', page: null } } });
     }
 }
 

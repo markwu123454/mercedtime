@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { freeTimes, range, DEFAULT_SETTINGS } from '../src/lib/schedule.js';
 import { buildingName, locationLabel } from '../src/lib/buildings.js';
-import { findDateTime } from '../src/lib/banner.js';
+import { ticketWindows, ticketState, pacificToEpoch } from '../src/lib/ticket.js';
 import { parseCourseInput } from '../src/lib/sections.js';
 
 const m = (h, mi) => h * 60 + mi;
@@ -37,7 +37,26 @@ assert.equal(buildingName({ building: 'RUIZ', buildingDescription: 'Ruiz Adminis
 assert.equal(locationLabel({ building: 'RUIZ', buildingDescription: 'Ruiz Administration Building', room: '353' }), 'Admin, Room 353');
 assert.equal(buildingName({ building: 'XYZ', buildingDescription: 'Somewhere New' }, 'common'), 'Somewhere New');
 
-assert.equal(findDateTime('begins 11/12/2026 9:00 AM').getHours(), 9);
+
+// time-ticket windows, exactly as Banner writes them (Pacific time)
+const panel = `<p>Please register within these times:</p>
+  <p>11/12/2026 01:00 PM - 12/07/2026 11:59 PM</p>
+  <p>12/11/2026 09:00 AM - 02/08/2027 11:59 PM</p>`;
+const win = ticketWindows(panel);
+assert.equal(win.length, 2);
+assert.equal(win[0].start, Date.UTC(2026, 10, 12, 21, 0), '1:00 PM PST is 21:00 UTC in November');
+assert.equal(win[0].end, Date.UTC(2026, 11, 8, 7, 59));
+assert.equal(win[1].start, Date.UTC(2026, 11, 11, 17, 0));
+assert.equal(win[1].end, Date.UTC(2027, 1, 9, 7, 59));
+assert.equal(pacificToEpoch(2026, 7, 1, 9, 0), Date.UTC(2026, 6, 1, 16, 0), 'July is daylight time, UTC-7');
+assert.equal(ticketState(win, Date.UTC(2026, 10, 1)).kind, 'upcoming');
+assert.equal(ticketState(win, Date.UTC(2026, 10, 1)).start, win[0].start);
+assert.equal(ticketState(win, Date.UTC(2026, 10, 20)).kind, 'open');
+assert.equal(ticketState(win, Date.UTC(2026, 11, 9)).start, win[1].start, 'between windows, the next one is the target');
+assert.equal(ticketState(win, Date.UTC(2026, 11, 9)).kind, 'upcoming');
+assert.equal(ticketState(win, Date.UTC(2027, 2, 1)).kind, 'ended');
+assert.equal(ticketState([]).kind, 'unknown');
+assert.equal(ticketWindows('Your time ticket allows registration.').length, 0);
 assert.deepEqual(parseCourseInput('me 1'), { key: 'ME001', subject: 'ME', number: '001' });
 assert.equal(parseCourseInput('nonsense!'), null);
 console.log('ok');

@@ -4,6 +4,7 @@ import { SIGN_IN_URL, beginSignIn } from '../lib/signin.js';
 import { buildBlocks, isSoft, scheduleSvg } from '../lib/schedule.js';
 import { sectionsForRows } from '../lib/registrations.js';
 import { shortType } from '../lib/schedule.js';
+import { ticketState } from '../lib/ticket.js';
 import { ScheduleSvg, termName, useNow } from './shared.jsx';
 
 // The home page mixes terms on purpose: the schedule is the term you are in, the timer
@@ -75,50 +76,62 @@ const toLocalInput = (ms) => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+const fmt = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
 function Timer({ term, terms, ticket, override }) {
     const now = useNow(1000);
     const [editing, setEditing] = useState(false);
-    const target = override ?? ticket?.at ?? null;
+    const windows = ticket?.page?.windows || [];
 
     if (!term) {
         return <section className="card"><h2 className="card-title">Registration</h2><p className="placeholder">No upcoming term found.</p></section>;
     }
 
+    // A time the user set replaces Banner's windows; it is a start, with no end.
+    const state = override != null
+        ? { kind: override > now ? 'upcoming' : 'open', start: override }
+        : ticketState(windows, now);
+
     let body;
-    if (ticket?.status === 'loading' && target == null) {
+    if (ticket?.status === 'loading' && state.kind === 'unknown') {
         body = <p className="placeholder">Looking up your registration time…</p>;
-    } else if (target == null) {
+    } else if (state.kind === 'unknown') {
         body = (
             <>
                 <p className="placeholder">Could not read a registration time from Banner.</p>
-                {ticket?.text && <p className="placeholder">Banner says: {ticket.text}</p>}
+                {ticket?.page?.messages?.filter((m) => m.kind !== 'success').map((m, i) => <p key={i} className="placeholder">{m.text}</p>)}
+            </>
+        );
+    } else if (state.kind === 'ended') {
+        body = <div className="timer-open">Your registration windows have ended.</div>;
+    } else if (state.kind === 'open') {
+        body = (
+            <>
+                <div className="timer-open">Your registration window is open.</div>
+                {state.end && <><p className="placeholder">Closes in</p><Countdown ms={state.end - now} /></>}
             </>
         );
     } else {
-        const diff = target - now;
-        body = diff <= 0
-            ? <div className="timer-open">Your registration time has started.</div>
-            : <Countdown ms={diff} />;
+        body = <Countdown ms={state.start - now} />;
     }
 
     return (
         <section className="card">
-            <h2 className="card-title">Registration · {termName(terms, term)}</h2>
+            <h2 className="card-title">Registration &middot; {termName(terms, term)}</h2>
             {body}
-            {target != null && (
-                <p className="placeholder">
-                    {new Date(target).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' })}
-                    {override != null && ' (set by you)'}
-                </p>
-            )}
+            {override != null
+                ? <p className="placeholder">{fmt(override)} (set by you)</p>
+                : windows.map((w, i) => (
+                    <p key={i} className={`placeholder${now >= w.end ? ' window-past' : ''}`}>{fmt(w.start)} &ndash; {fmt(w.end)}</p>
+                ))}
             <div className="timer-edit">
                 <button className="button-ghost" onClick={() => setEditing(!editing)}>
-                    {editing ? 'Cancel' : target == null ? 'Set time' : 'Change time'}
+                    {editing ? 'Cancel' : state.kind === 'unknown' ? 'Set time' : 'Change time'}
                 </button>
                 {editing && (
                     <>
                         <input className="field" type="datetime-local"
-                               defaultValue={target != null ? toLocalInput(target) : ''}
+                               defaultValue={override != null ? toLocalInput(override) : state.start ? toLocalInput(state.start) : ''}
                                onChange={(e) => e.target.value && setTicketOverride(term, new Date(e.target.value).getTime())} />
                         {override != null && <button className="button-ghost" onClick={() => setTicketOverride(term, null)}>Use Banner&rsquo;s</button>}
                     </>
