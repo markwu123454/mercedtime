@@ -10,15 +10,18 @@ import Generator from './Generator.jsx';
 export default function PlanSchedule({ term: T }) {
     const { terms, term, sectionsByTerm, loading, loadingText, error, planAll, registered, settings } = useStore((s) => s);
 
+    const listed = terms.some((t) => String(t.code) === String(T));
     useEffect(() => {
         if (!T) return;
-        if (term !== T) selectTerm(T);       // loads that term's classes (and makes it the toolbar term)
+        // Loads that term's classes and makes it the toolbar term. A semester Banner does
+        // not list has no classes to load.
+        if (term !== T && listed) selectTerm(T);
         loadRegistered(T);
     }, [T]);
 
     const catalog = sectionsByTerm[T];
     // A term whose classes are not published answers with nothing, which is not cached.
-    const unpublished = !catalog && term === T && !loading && error === 'No classes found for this term.';
+    const unpublished = !catalog && (!listed || (term === T && !loading && error === 'No classes found for this term.'));
     const sections = catalog || [];
     const items = Object.values(planAll[T] || {}).sort((a, b) => a.key.localeCompare(b.key));
     const taken = (registered[T]?.rows || []).filter((r) => !r.dropped);

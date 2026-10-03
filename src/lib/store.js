@@ -6,6 +6,8 @@
 import { useSyncExternalStore } from 'react';
 import * as api from './api.js';
 import { courseKey } from './sections.js';
+import * as cache from './cache.js';
+import { courseList, termLabel } from './courses.js';
 import { byCourse } from './generate.js';
 import { DEFAULT_SETTINGS } from './schedule.js';
 import { normalizeRegistration, registrationRows, calendarTerm } from './registrations.js';
@@ -38,7 +40,10 @@ let state = {
     home: { status: 'idle', error: null, currentTerm: null, nextTerm: null, activeRows: [] },
     tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', at: ms | null, text } }
     settings: DEFAULT_SETTINGS,
-    discovery: { status: 'idle', checked: 0 },   // the search for past semesters (see discoverTerms)
+    discovery: { status: 'idle', checked: 0 },
+    cacheMeta: {},          // { [term]: { fetchedAt, count } } for every downloaded catalog
+    courseIndex: {},        // { [term]: [[key, subject, number, title]] } for every downloaded catalog
+    downloads: { status: 'idle', term: null, mode: null, bg: false, loaded: 0, total: 0 },   // the search for past semesters (see discoverTerms)
 };
 
 const subs = new Set();
@@ -127,6 +132,7 @@ export function applySchedule(term, sections) {
 export async function updateSettings(patch) {
     const settings = { ...state.settings, ...patch };
     set({ settings });
+    refocus();     // download settings change what the loader should be doing
     await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
@@ -143,35 +149,166 @@ api.onSessionLost((kind) => set({
 
 // --- catalogs ------------------------------------------------------------------
 
-// Only one term's catalog is ever being fetched: the one the user is looking at. Asking
-// for another term (or leaving the page that needs it) pauses the current fetch at the
-// next page boundary and keeps what it already has; coming back resumes at that offset.
+// Every catalog is downloaded once and kept (IndexedDB, see cache.js). The loader works
+// on one thing at a time, a page at a time, and picks what by priority:
+//
+//   1. the term the user is looking at, if it has never been downloaded
+//   2. that term's seat numbers, if the user is viewing seats and the copy is stale
+//   3. in the background, the next term nobody has downloaded yet
+//
+// Seats are only refreshed for what is being viewed; background downloads never
+// refresh anything already saved. Switching what is wanted pauses the current job at
+// the next page and keeps its progress; coming back resumes at that offset.
 //
 // One fetcher is also a correctness requirement. searchResults reads the term from
-// session state, so two catalogs loading together would trample each other's
-// saveTerm. After a pause the session holds the other term, so the term is committed
-// again before the first resumed page.
-const loads = new Map();   // term -> { rows, offset, total, failed, waiters }
-let committed = null;      // the term the session's search state currently holds
+// session state, so two downloads at once would trample each other's saveTerm. After a
+// pause the session holds the other term, so the term is committed again first.
+const SEAT_TTL_MS = 5 * 60 * 1000;         // how old a copy may be before viewing it refreshes seats
+const BG_PAGE_DELAY_MS = 250;              // background downloads go gently
+const EMPTY_RETRY_MS = 30 * 60 * 1000;     // how long before asking again about a term with no classes
+const PARTIAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const REFRESH_RESTART_MS = 3 * 60 * 1000;  // an abandoned seat refresh this old starts over
+
+const loads = new Map();     // `${mode}:${term}` -> { mode, term, rows, offset, total, failed, waiters, ... }
+const emptyAt = new Map();   // term -> when Banner last answered with no classes for it
+const forced = new Set();    // terms whose seats the user asked to refresh now
+const hydrating = new Map();
+let committed = null;        // the term the session's search state currently holds
 let running = false;
+let lastProgress = 0;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isListed = (t) => state.terms.some((x) => String(x.code) === String(t));
+const inMemory = (t) => !!state.sectionsByTerm[t];
+const isCached = (t) => !!state.cacheMeta[t];
 
 /** The term the user currently needs. On Home that is the term its schedule is drawn
  *  from; everywhere else it is the term picked in the toolbar. */
 const wantedTerm = () =>
     (state.route === 'home' ? state.home.currentTerm : null) || state.term;
 
-async function loadNextPage(term, l) {
-    if (committed !== term) {
-        committed = null;
-        await api.saveTerm(term);
-        committed = term;
+/** Seats matter on the pages that show them. */
+const viewingSeats = () => state.route === 'search' || state.route === 'plan';
+
+const entry = (mode, term) => {
+    const key = `${mode}:${term}`;
+    if (!loads.has(key)) {
+        loads.set(key, { mode, term, rows: [], offset: 0, total: 0, failed: false, waiters: [], init: false, pages: 0, startedAt: Date.now() });
     }
-    const { rows, total } = await api.searchPage(term, l.offset);
+    return loads.get(key);
+};
+
+/** Bring a saved catalog into memory. */
+function hydrate(term) {
+    if (state.sectionsByTerm[term]) return Promise.resolve(state.sectionsByTerm[term]);
+    if (!hydrating.has(term)) {
+        hydrating.set(term, cache.getCatalog(term).then((c) => {
+            hydrating.delete(term);
+            if (!c) return [];
+            set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: c.rows } });
+            return c.rows;
+        }));
+    }
+    return hydrating.get(term);
+}
+
+function bgCandidates() {
+    if (!state.settings.backgroundDownload) return [];
+    const desc = state.terms.map((t) => String(t.code)).sort((a, b) => Number(b) - Number(a));
+    const planned = Object.keys(state.planAll).filter((t) => Object.keys(state.planAll[t] || {}).length);
+    const now = Date.now();
+    return [...new Set([...planned, ...(state.settings.extraTerms || []), ...desc.slice(0, state.settings.keepTerms)])]
+        .filter((t) => isListed(t) && !isCached(t) && !loads.get(`full:${t}`)?.failed
+            && !(emptyAt.has(t) && now - emptyAt.get(t) < EMPTY_RETRY_MS));
+}
+
+function pickJob() {
+    const fg = wantedTerm();
+    if (fg && isListed(fg)) {
+        const full = loads.get(`full:${fg}`);
+        if (full && !full.failed && !inMemory(fg) && !isCached(fg)) return { term: fg, mode: 'full', bg: false };
+        if (viewingSeats() && fg === state.term && isCached(fg) && !loads.get(`refresh:${fg}`)?.failed
+            && (forced.has(fg) || Date.now() - state.cacheMeta[fg].fetchedAt > SEAT_TTL_MS)) {
+            return { term: fg, mode: 'refresh', bg: false };
+        }
+    }
+    const next = bgCandidates()[0];
+    return next ? { term: next, mode: 'full', bg: true } : null;
+}
+
+const dedupe = (rows) => [...new Map(rows.map((r) => [r.courseReferenceNumber, r])).values()];
+
+async function saveCatalog(term, rows) {
+    const fetchedAt = Date.now();
+    await cache.putCatalog(term, rows, fetchedAt);
+    const list = courseList(rows);
+    cache.putCourses(term, list);
+    set({
+        cacheMeta: { ...state.cacheMeta, [term]: { fetchedAt, count: rows.length } },
+        courseIndex: { ...state.courseIndex, [term]: list },
+    });
+}
+
+async function stepPage(l, bg) {
+    if (l.mode === 'full' && !l.init) {
+        l.init = true;
+        const part = await cache.getPartial(l.term);
+        if (part && !l.rows.length && Date.now() - part.savedAt < PARTIAL_MAX_AGE_MS) {
+            l.rows = part.rows; l.offset = part.offset; l.total = part.total;     // resume an earlier download
+        }
+    }
+    if (bg) await sleep(BG_PAGE_DELAY_MS);
+    if (committed !== l.term) {
+        committed = null;
+        await api.saveTerm(l.term);
+        committed = l.term;
+    }
+    const { rows, total } = await api.searchPage(l.term, l.offset);
     l.rows.push(...rows);
     l.offset += rows.length;
     l.total = total || l.rows.length;
-    if (state.term === term) set({ sections: [...l.rows], loadingText: `Loading… ${l.offset} / ${l.total}` });
+    l.pages++;
+
+    if (l.mode === 'full' && state.term === l.term) set({ sections: [...l.rows], loadingText: `Loading… ${l.offset} / ${l.total}` });
+    if (l.mode === 'full' && l.pages % 5 === 0) cache.putPartial(l.term, { rows: l.rows, offset: l.offset, total: l.total });
+    // Progress for the status line, at most a few times a second.
+    if (Date.now() - lastProgress > 700) {
+        lastProgress = Date.now();
+        set({ downloads: { status: 'running', term: l.term, mode: l.mode, bg, loaded: l.offset, total: l.total } });
+    }
     return !rows.length || l.offset >= l.total;
+}
+
+async function finish(l) {
+    loads.delete(`${l.mode}:${l.term}`);
+    const { term } = l;
+
+    if (l.mode === 'full') {
+        const rows = dedupe(l.rows);
+        cache.delPartial(term);
+        if (!rows.length) {
+            // Not cached: it can be a term whose classes are not published, or a session
+            // that never committed the term, and either deserves another look later.
+            emptyAt.set(term, Date.now());
+            l.waiters.forEach((w) => w.resolve([]));
+            return;
+        }
+        await saveCatalog(term, rows);
+        // Memory only for what is being used; a background download is saved and dropped.
+        if (l.waiters.length || term === state.term || term === wantedTerm()) {
+            set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: rows } });
+        }
+        l.waiters.forEach((w) => w.resolve(rows));
+        return;
+    }
+
+    // refresh: newer rows replace their saved copies; classes new since the download are added
+    const base = state.sectionsByTerm[term] || (await cache.getCatalog(term))?.rows || [];
+    const merged = dedupe([...base, ...l.rows]);
+    await saveCatalog(term, merged);
+    forced.delete(term);
+    if (inMemory(term)) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: merged } });
+    if (state.term === term) set({ sections: merged });
 }
 
 async function runLoader() {
@@ -179,20 +316,19 @@ async function runLoader() {
     running = true;
     try {
         for (;;) {
-            const term = wantedTerm();
-            const l = term && loads.get(term);
-            if (!l || l.failed || state.sectionsByTerm[term]) return;
+            const fg = wantedTerm();
+            if (fg && isCached(fg) && !inMemory(fg)) await hydrate(fg);     // saved copy first
+            const job = pickJob();
+            if (!job) { set({ downloads: { status: 'idle', term: null, mode: null, bg: false, loaded: 0, total: 0 } }); return; }
+
+            const l = entry(job.mode, job.term);
+            if (job.mode === 'refresh' && !l.rows.length && Date.now() - l.startedAt > REFRESH_RESTART_MS) l.startedAt = Date.now();
             try {
-                if (await loadNextPage(term, l)) {
-                    // An empty answer is not cached: it can be a session that never
-                    // committed the term, and caching it would hide the retry.
-                    if (l.rows.length) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: l.rows } });
-                    loads.delete(term);
-                    l.waiters.forEach((w) => w.resolve(l.rows));
-                }
+                if (await stepPage(l, job.bg)) await finish(l);
             } catch (e) {
                 l.failed = true;
                 l.waiters.splice(0).forEach((w) => w.reject(e));
+                set({ downloads: { status: 'idle', term: null, mode: null, bg: false, loaded: 0, total: 0 } });
             }
         }
     } finally {
@@ -201,7 +337,7 @@ async function runLoader() {
 }
 
 /** Point the loader at whatever the user currently needs. Call after anything that
- *  changes that: the selected term, the route, the home page's term. */
+ *  changes that: the selected term, the route, the home page's term, the settings. */
 export function refocus() { runLoader(); }
 
 export function setRoute(route) {
@@ -209,34 +345,44 @@ export function setRoute(route) {
     refocus();
 }
 
-/** One term's full section list, resolved once it has loaded. Does not by itself make
- *  the term the active one: the fetch runs while the term is wanted (see wantedTerm). */
-export function loadSections(term) {
-    const cached = state.sectionsByTerm[term];
-    if (cached) return Promise.resolve(cached);
-    let l = loads.get(term);
-    if (!l) loads.set(term, (l = { rows: [], offset: 0, total: 0, failed: false, waiters: [] }));
-    l.failed = false;                  // asking again is a retry
+/** One term's full section list, resolved once it is available: from memory, from the
+ *  saved copy, or downloaded. Does not by itself make the term the active one; a
+ *  download runs while the term is wanted (see wantedTerm), else in the background. */
+export async function loadSections(term) {
+    if (state.sectionsByTerm[term]) return state.sectionsByTerm[term];
+    if (isCached(term)) return hydrate(term);
+    if (!isListed(term)) return [];            // a semester Banner does not list yet has nothing to fetch
+    emptyAt.delete(term);                      // asking again is a retry
+    const l = entry('full', term);
+    l.failed = false;
     const p = new Promise((resolve, reject) => l.waiters.push({ resolve, reject }));
     refocus();
     return p;
+}
+
+/** Re-read seat numbers for a term now, instead of waiting for them to go stale. */
+export function refreshSeats(term = state.term) {
+    forced.add(term);
+    loads.delete(`refresh:${term}`);
+    refocus();
 }
 
 export async function selectTerm(term) {
     set({ term, error: null, plan: crnSet(state.planAll[term]) });
     await chrome.storage.local.set({ [TERM_KEY]: term });
 
-    const cached = state.sectionsByTerm[term];
-    if (cached) { set({ sections: cached, loading: false, loadingText: '' }); refocus(); return; }
+    const inMem = state.sectionsByTerm[term];
+    if (inMem) { set({ sections: inMem, loading: false, loadingText: '' }); refocus(); return; }
 
-    // Anything already fetched for this term (a paused load) shows straight away.
-    const have = loads.get(term)?.rows || [];
+    // Anything already fetched for this term (a paused download) shows straight away.
+    const have = loads.get(`full:${term}`)?.rows || [];
     set({ sections: [...have], loading: true, loadingText: have.length ? `Loading… ${have.length}` : 'Loading classes…' });
     try {
         const acc = await loadSections(term);
         if (state.term !== term) return;     // the user moved on while it loaded
         set({ sections: acc, loading: false, loadingText: '' });
         if (!acc.length) set({ error: 'No classes found for this term.' });
+        refocus();
     } catch (e) {
         if (state.term !== term) return;
         set({
@@ -246,6 +392,15 @@ export async function selectTerm(term) {
                 : `Failed to load classes: ${e.message}`,
         });
     }
+}
+
+/** Saved catalogs and course lists, read at startup (the rows themselves load on use). */
+async function hydrateCacheMeta() {
+    const [meta, courses] = await Promise.all([cache.listMeta(), cache.allCourses()]);
+    set({
+        cacheMeta: Object.fromEntries(meta.map((m) => [m.term, { fetchedAt: m.fetchedAt, count: m.count }])),
+        courseIndex: Object.fromEntries(courses.map((c) => [c.term, c.list])),
+    });
 }
 
 // --- registrations -----------------------------------------------------------------
@@ -389,17 +544,24 @@ export async function boot() {
         planAll: saved[PLAN_KEY] || {},
         settings: { ...DEFAULT_SETTINGS, ...(saved[SETTINGS_KEY] || {}) },
     });
+    await hydrateCacheMeta();
+    setInterval(() => { if (document.visibilityState === 'visible') refocus(); }, 60 * 1000);   // seats go stale while a page stays open
 
     let terms = [];
     try {
         terms = await api.getSearchTerms();
     } catch {
-        // Public call; if even this fails there is nothing to browse.
-        set({ error: 'Could not reach Banner to list terms.' });
-        return;
+        // Public call. If even this fails, work from what has been downloaded.
+        terms = Object.keys(state.cacheMeta).sort((a, b) => Number(b) - Number(a))
+            .map((code) => ({ code, description: termLabel(code) }));
+        if (!terms.length) {
+            set({ error: 'Could not reach Banner to list terms.' });
+            return;
+        }
     }
 
-    const stored = (await chrome.storage.local.get(TERM_KEY))[TERM_KEY];
+    const savedTerm = (await chrome.storage.local.get(TERM_KEY))[TERM_KEY];
+    const stored = terms.some((t) => String(t.code) === String(savedTerm)) ? savedTerm : null;   // a hand-added semester is not a toolbar term
     set({ terms, term: stored || null });
 
     // Which terms are open for registration. Authenticated and optional — its absence

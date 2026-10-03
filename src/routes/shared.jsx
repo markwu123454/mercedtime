@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { selectTerm } from '../lib/store.js';
 
-export const termName = (terms, code) => terms.find((t) => t.code === code)?.description || code || '';
+import { termLabel } from '../lib/courses.js';
+
+// Banner's own name for the term when it lists it, else one built from the code.
+export const termName = (terms, code) => terms.find((t) => t.code === code)?.description || (code ? termLabel(code) : '');
+
+/** "3m ago" for a timestamp. */
+export function ago(ms, now = Date.now()) {
+    const s = Math.max(0, Math.round((now - ms) / 1000));
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+}
 
 export function TermSelect({ terms, term }) {
     return (

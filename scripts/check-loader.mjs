@@ -28,6 +28,11 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const store = await import('../src/lib/store.js');
+// Only listed terms are fetched; background downloading is off so only the wanted term moves.
+store.set({
+    terms: ['A', 'B', 'D'].map((code) => ({ code, description: code })),
+    settings: { ...store.getState().settings, backgroundDownload: false },
+});
 const offsets = (term) => log.filter((l) => l.startsWith(`${term}@`)).map((l) => Number(l.split('@')[1]));
 const until = async (fn) => { for (let i = 0; i < 500 && !fn(); i++) await sleep(2); assert.ok(fn(), 'timed out'); };
 

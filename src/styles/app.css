@@ -268,3 +268,13 @@ input[type='number'].field { width: 90px; }
 .lecture-setting { min-width: 150px; height: 28px; }
 a.button-primary { display: inline-flex; align-items: center; text-decoration: none; }
 a.button-ghost { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* --- downloads and semester controls ------------------------------------------- */
+.download-panel { margin: var(--spacing-05) var(--spacing-05) 0; padding: var(--spacing-04) var(--spacing-05); background: var(--layer-01); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: var(--spacing-03); }
+.download-line { display: flex; flex-wrap: wrap; gap: var(--spacing-05); align-items: center; }
+.download-controls { display: flex; flex-wrap: wrap; gap: var(--spacing-06); align-items: center; }
+.download-controls input[type='number'].field { width: 64px; }
+.add-semester { padding: 0 var(--spacing-05) var(--spacing-04); flex-wrap: wrap; }
+.seat-status { margin-left: auto; color: var(--text-secondary); font-size: var(--label-01-size); }
+.seat-status + .count { margin-left: var(--spacing-05); }
+.term-add { flex-wrap: wrap; }

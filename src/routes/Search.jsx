@@ -1,5 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useStore, selectTerm, togglePlanSection, togglePlanCourse } from '../lib/store.js';
+import { useStore, selectTerm, togglePlanSection, togglePlanCourse, refreshSeats } from '../lib/store.js';
+import { ago } from './shared.jsx';
 import * as api from '../lib/api.js';
 import {
     groupCourses, parseQuery, searchRank, RANK_MISS,
@@ -11,7 +12,7 @@ import {
 const COLUMNS = ['', 'CRN', 'Sec', 'Type', 'Cr', 'Instructor', 'Days/Time', 'Location', 'Seats', 'Modality'];
 
 export default function Search() {
-    const { sections, terms, term, loading, loadingText, error, plan } = useStore((s) => s);
+    const { sections, terms, term, loading, loadingText, error, plan, cacheMeta, downloads } = useStore((s) => s);
 
     const [query, setQuery] = useState('');
     const [subject, setSubject] = useState('');
@@ -94,6 +95,14 @@ export default function Search() {
                     <input type="checkbox" checked={planOnly} onChange={(e) => setPlanOnly(e.target.checked)} />
                     My plan
                 </label>
+                <span className="seat-status">
+                    {downloads.mode === 'refresh' && downloads.term === term
+                        ? <span className="loading"><span className="spinner" />Updating seats… {downloads.loaded} / {downloads.total}</span>
+                        : cacheMeta[term] && (
+                            <>Seats updated {ago(cacheMeta[term].fetchedAt)}{' '}
+                                <button className="button-ghost" onClick={() => refreshSeats(term)}>Refresh</button></>
+                        )}
+                </span>
                 <span className="count">
                     {loading
                         ? <span className="loading"><span className="spinner" />{loadingText}</span>

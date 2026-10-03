@@ -27,6 +27,10 @@ export const DEFAULT_SETTINGS = {
     softLectures: true,
     softAsFree: false,       // draw the free-time boxes as if skippable lectures were not there
     softOverride: {},
+    // Downloads
+    backgroundDownload: true,   // keep downloading terms in the background while the app is open
+    keepTerms: 12,              // how many of the newest terms to keep downloaded
+    extraTerms: [],             // semesters added by hand, beyond the ones Banner lists
 };
 
 /** "0930" -> 570 */

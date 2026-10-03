@@ -19,7 +19,7 @@ state machine with conditional interstitials and the failure modes cost real sea
 ```bash
 npm install
 npm run build      # or: npm run watch
-npm run check      # offline checks of the schedule maths
+npm run check      # offline checks: schedule maths, loader, generator, downloads
 ```
 
 Load `dist/` as an unpacked extension. A service worker redirects
@@ -36,7 +36,9 @@ src/
   lib/api.js          every network call; owns the four session failure modes
   lib/sections.js     pure Banner data logic — bundles, seats, tiers, search ranking
   lib/banner.js       parses Banner's server-rendered status HTML
-  lib/store.js        shared state + plan persistence
+  lib/store.js        shared state, plan persistence, and the catalog downloader
+  lib/cache.js        IndexedDB store for downloaded terms (survives restarts)
+  lib/courses.js      course options for a term from earlier terms of its season
   routes/             Home, Search, Plan, Schedule (built); Standing / History (stubs)
 fixtures/             offline test data — see below
 scripts/              the scrapers that produced the fixtures
