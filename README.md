@@ -41,7 +41,7 @@ src/
   lib/degree.js       audit logic: ids, course keys, what a plan would meet
   lib/cache.js        IndexedDB store for downloaded terms (survives restarts)
   lib/courses.js      course options for a term from earlier terms of its season
-  routes/             Home, Search, Plan, Schedule (built); Standing / History (stubs)
+  routes/             Home, Find classes (Search), Plan, Schedule, Degree, Standing
 fixtures/             offline test data — see below
 scripts/              the scrapers that produced the fixtures
 ```

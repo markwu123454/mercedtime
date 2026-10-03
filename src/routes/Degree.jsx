@@ -3,6 +3,7 @@ import { useStore, loadDegree, runNewAudit, loadSections } from '../lib/store.js
 import { AUDIT_BASE } from '../lib/audit.js';
 import { courseKeyOf, keyFromCourseText, plannedCourses, simulatePlan } from '../lib/degree.js';
 import { creditNum } from '../lib/sections.js';
+import CourseDetail from './CourseDetail.jsx';
 import { termName, ago } from './shared.jsx';
 
 // Four states, with hue for the kind of fact and fill for how finished it is. Green is on your
@@ -15,8 +16,9 @@ const OPTION_CAP = 24;
 // planned in this app would do to it. Reading is automatic; running a new audit is a button,
 // because that adds an audit to the student's saved list.
 export default function Degree() {
-    const { degree, planAll, terms, sectionsByTerm, cacheMeta } = useStore((s) => s);
+    const { degree, planAll, terms, sectionsByTerm, cacheMeta, courseIndex, home, settings } = useStore((s) => s);
     const [tab, setTab] = useState('audit');
+    const [selected, setSelected] = useState(null);     // the course key shown in the right panel
 
     useEffect(() => { loadDegree(); }, []);
 
@@ -41,6 +43,8 @@ export default function Degree() {
         for (const k of done) taking.delete(k);
         return { doneKeys: done, takingKeys: taking };
     }, [audit, history]);
+
+    const stateOf = (key) => (doneKeys.has(key) ? 'done' : takingKeys.has(key) ? 'taking' : planKeys.has(key) ? 'plan' : 'todo');
 
     const plannedUnits = useMemo(() => {
         let units = 0;
@@ -78,7 +82,8 @@ export default function Degree() {
                 </div>
             )}
 
-            <div className="page-scroll">
+            <div className="panes">
+            <div className="list-pane">
             {status === 'signed-out' && (
                 <div className="status status-error">
                     Sign in to uAchieve to read your degree audit.{' '}
@@ -101,13 +106,18 @@ export default function Degree() {
                         <>
                             <Summary audit={audit} plannedUnits={plannedUnits} planned={planned.length} sim={sim} />
                             {audit.requirements.map((req, ri) => (
-                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
+                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} selected={selected} onSelect={setSelected} />
                             ))}
                         </>
                     )}
-                    {tab === 'history' && <History rows={history} />}
+                    {tab === 'history' && <History rows={history} selected={selected} onSelect={setSelected} />}
                 </>
             )}
+            </div>
+            {selected
+                ? <CourseDetail courseKeyStr={selected} state={stateOf(selected)} audit={audit} history={history} planned={planned}
+                                courseIndex={courseIndex} cacheMeta={cacheMeta} sectionsByTerm={sectionsByTerm} terms={terms} nextTerm={home.nextTerm} scheme={settings.buildingScheme} />
+                : <aside className="detail-pane"><p className="placeholder">Select a course for details.</p></aside>}
             </div>
         </>
     );
@@ -143,7 +153,7 @@ function Summary({ audit, plannedUnits, planned, sim }) {
     );
 }
 
-function Requirement({ req, ri, sim, terms, planKeys, doneKeys, takingKeys }) {
+function Requirement({ req, ri, sim, terms, planKeys, doneKeys, takingKeys, selected, onSelect }) {
     const [label, tone] = STATUS[req.status] || STATUS.NONE;
     const done = sim?.completes[ri] && req.status === 'NO';
     return (
@@ -157,17 +167,17 @@ function Requirement({ req, ri, sim, terms, planKeys, doneKeys, takingKeys }) {
                     </span>
                 ) : null}
             </div>
-            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />}
+            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} selected={selected} onSelect={onSelect} />}
             {req.subs.map((sub, si) => (
                 <div key={si} className="sub-row">
-                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
+                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} selected={selected} onSelect={onSelect} />
                 </div>
             ))}
         </section>
     );
 }
 
-function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys }) {
+function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys, selected, onSelect }) {
     const [label, tone] = STATUS[node.status] || STATUS.NONE;
     const hit = sim?.assigned[id];
     const hasTitle = 'title' in node && node.title && node.subs === undefined;
@@ -182,24 +192,29 @@ function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys }) {
             )}
             {node.courses.length > 0 && (
                 <div className="applied">
-                    {node.courses.map((c, i) => (
-                        <span key={i} className={`chip chip-done${c.inProgress ? ' chip-ip' : ''}`} title={[c.description, c.term, c.grade && `Grade ${c.grade}`].filter(Boolean).join(' · ')}>
-                            {c.course}
-                        </span>
-                    ))}
+                    {node.courses.map((c, i) => {
+                        const key = keyFromCourseText(c.course);
+                        return (
+                            <button key={i} className={`chip chip-done chip-button${c.inProgress ? ' chip-ip' : ''}`} aria-pressed={selected === key}
+                                    title={[c.description, c.term, c.grade && `Grade ${c.grade}`].filter(Boolean).join(' · ')}
+                                    disabled={!key} onClick={() => onSelect(key)}>
+                                {c.course}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
             {hit && (
                 <p className="planned-hit">Your plan covers this with <strong>{hit.subject} {hit.number}</strong> in {termName(terms, hit.term)}.</p>
             )}
             {node.status !== 'OK' && node.status !== 'IP' && node.options.length > 0 && (
-                <Options options={node.options} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} />
+                <Options options={node.options} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} selected={selected} onSelect={onSelect} />
             )}
         </>
     );
 }
 
-function Options({ options, planKeys, doneKeys, takingKeys }) {
+function Options({ options, planKeys, doneKeys, takingKeys, selected, onSelect }) {
     const [all, setAll] = useState(false);
     const shown = all ? options : options.slice(0, OPTION_CAP);
     return (
@@ -212,10 +227,10 @@ function Options({ options, planKeys, doneKeys, takingKeys }) {
                     const taking = !done && takingKeys.has(key);
                     const inPlan = !done && !taking && planKeys.has(key);
                     return (
-                        <span key={key} className={`chip ${done ? 'chip-done' : taking ? 'chip-done chip-ip' : inPlan ? 'chip-plan' : 'chip-todo'}`}
-                              title={done ? 'Done' : taking ? 'Taking now' : inPlan ? 'In your plan' : 'Not taken or planned'}>
+                        <button key={key} className={`chip chip-button ${done ? 'chip-done' : taking ? 'chip-done chip-ip' : inPlan ? 'chip-plan' : 'chip-todo'}`}
+                                aria-pressed={selected === key} onClick={() => onSelect(key)}>
                             {o.department} {o.number}
-                        </span>
+                        </button>
                     );
                 })}
                 {options.length > OPTION_CAP && (
@@ -226,14 +241,15 @@ function Options({ options, planKeys, doneKeys, takingKeys }) {
     );
 }
 
-function History({ rows }) {
+function History({ rows, selected, onSelect }) {
     if (!rows.length) return <p className="placeholder pad">No course history was found.</p>;
     return (
         <table className="data-table">
             <thead><tr><th>Term</th><th>Course</th><th>Title</th><th>Hours</th><th>Grade</th><th>Status</th></tr></thead>
             <tbody>
             {rows.map((r, i) => (
-                <tr key={i}>
+                <tr key={i} aria-selected={selected && keyFromCourseText(r.course) === selected ? true : undefined}
+                    onClick={() => { const k = keyFromCourseText(r.course); if (k) onSelect(k); }} className="clickable-row">
                     <td>{r.term || r.courseTerm}</td>
                     <td className="course-code">{r.course}</td>
                     <td>{r.title}</td>

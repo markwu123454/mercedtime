@@ -9,7 +9,6 @@ import PlanSchedule from './routes/PlanSchedule.jsx';
 import Degree from './routes/Degree.jsx';
 import Standing from './routes/Standing.jsx';
 import Plan from './routes/Plan.jsx';
-import History from './routes/History.jsx';
 
 // Six flat routes, no params, no nesting — react-router would be more moving parts
 // than this needs. Swap it in the moment a route grows parameters.
@@ -34,7 +33,6 @@ const TABS = [
     ['schedule', 'Schedule'],
     ['degree', 'Degree'],
     ['standing', 'Standing'],
-    ['history', 'Record'],
 ];
 
 export default function App() {
@@ -74,7 +72,6 @@ export default function App() {
                 : route === 'schedule' ? <Schedule />
                 : route === 'degree' ? <Degree />
                 : route === 'standing' ? <Standing />
-                : route === 'history' ? <History />
                 : <Home />}
         </>
     );
