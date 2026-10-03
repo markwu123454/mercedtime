@@ -18,14 +18,21 @@ chrome.webNavigation.onBeforeNavigate.addListener(
 );
 
 // Sign-in round trip. The extension page's "Sign in" link sets pendingSignIn for its
-// own tab and goes to Banner's Prepare for Registration term page, which is protected,
-// so Banner sends the user through SSO and back to that URL. Only when the tab arrives
-// there does it return to app.html. Nothing in between (the IdP, Duo) matches, so the
-// login is never interrupted. The flag is tab-specific and expires, so a normal visit
-// to that Banner page is left alone.
+// own tab and goes to Banner's Prepare for Registration term page. That page is
+// protected, so Banner answers with a redirect to the login (SSO, then Duo) and, once
+// that finishes, back to the same URL.
+//
+// onCommitted, not onBeforeNavigate: onBeforeNavigate fires when the click starts, at
+// the URL we asked for, before Banner has redirected anywhere, and returning the tab
+// then cancels the login before it begins. onCommitted fires when a navigation lands,
+// at the URL it ended on. The IdP and Duo pages never match, so the login is never
+// interrupted, and the tab is returned only when it arrives back at Banner.
+//
+// The flag is tab-specific and expires, so a normal visit to that Banner page is left
+// alone.
 const SIGN_IN_TTL_MS = 10 * 60 * 1000;
 
-chrome.webNavigation.onBeforeNavigate.addListener(
+chrome.webNavigation.onCommitted.addListener(
   async (details) => {
     if (details.frameId !== 0) return;
     const { pendingSignIn } = await chrome.storage.session.get('pendingSignIn');
