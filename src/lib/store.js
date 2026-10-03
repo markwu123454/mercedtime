@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import * as api from './api.js';
 import { courseKey } from './sections.js';
+import { byCourse } from './generate.js';
 import { DEFAULT_SETTINGS } from './schedule.js';
 import { normalizeRegistration, registrationRows } from './registrations.js';
 import { parseTimeTicket } from './banner.js';
@@ -101,6 +102,22 @@ export function togglePlanSection(sec, term = state.term) {
             item.info = { ...item.info, [crn]: { seq: sec.sequenceNumber, type: sec.scheduleTypeDescription } };
         }
         items[key] = item;
+    }));
+}
+
+/** Make a generated schedule the plan for its courses: each course's picked sections
+ *  are replaced by this schedule's. Courses not in the schedule are left alone. */
+export function applySchedule(term, sections) {
+    return savePlan(withTerm(state.planAll, term, (items) => {
+        for (const [key, secs] of byCourse(sections)) {
+            const first = secs[0];
+            const item = { ...(items[key] || newItem({
+                key, subject: first.subject, number: first.courseNumber, title: first.courseTitle,
+            })) };
+            item.crns = secs.map((s) => s.courseReferenceNumber);
+            item.info = Object.fromEntries(secs.map((s) => [s.courseReferenceNumber, { seq: s.sequenceNumber, type: s.scheduleTypeDescription }]));
+            items[key] = item;
+        }
     }));
 }
 

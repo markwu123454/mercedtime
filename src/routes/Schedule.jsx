@@ -3,10 +3,7 @@ import { useStore, loadRegistered, updateSettings } from '../lib/store.js';
 import { buildBlocks, scheduleSvg } from '../lib/schedule.js';
 import { BUILDING_SCHEMES } from '../lib/buildings.js';
 import { sectionsForRows } from '../lib/registrations.js';
-import { ScheduleSvg, TermSelect, downloadText, termName } from './shared.jsx';
-
-const minsToInput = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-const inputToMins = (v) => { const [h, m] = v.split(':').map(Number); return h * 60 + (m || 0); };
+import { ScheduleSvg, TermSelect, downloadText, termName, minsToInput, inputToMins } from './shared.jsx';
 
 export default function Schedule() {
     const { terms, term, sections, loading, loadingText, planAll, registered, settings } = useStore((s) => s);

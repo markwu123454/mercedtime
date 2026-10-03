@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build",
     "watch": "vite build --watch",
-    "check": "node scripts/check-schedule.mjs && node scripts/check-loader.mjs"
+    "check": "node scripts/check-schedule.mjs && node scripts/check-loader.mjs && node scripts/check-generate.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

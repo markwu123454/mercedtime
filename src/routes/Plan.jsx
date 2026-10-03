@@ -5,12 +5,13 @@ import {
     parseCourseInput, primaryFaculty, seatsLabel, tierOf,
 } from '../lib/sections.js';
 import { TermSelect } from './shared.jsx';
+import Generator from './Generator.jsx';
 
 // Planning is keyed by course ("ME 001"), not by CRN, because a future term's CRNs may
 // not exist yet. A course sits in the plan without a section; once the term's classes
 // are published you pick sections for it here or in Find classes.
 export default function Plan() {
-    const { terms, term, sections, loading, loadingText, planAll, registered } = useStore((s) => s);
+    const { terms, term, sections, loading, loadingText, planAll, registered, settings } = useStore((s) => s);
     const [text, setText] = useState('');
     const [problem, setProblem] = useState(null);
 
@@ -86,6 +87,8 @@ export default function Plan() {
                               sections={sections.filter((s) => courseKey(s) === item.key)}
                               loading={loading} />
                 ))}
+
+                <Generator term={term} items={items} taken={taken} sections={sections} settings={settings} />
             </div>
         </>
     );

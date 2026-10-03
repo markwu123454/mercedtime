@@ -35,3 +35,6 @@ export function downloadText(text, filename, type) {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+export const minsToInput = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+export const inputToMins = (v) => { const [h, m] = v.split(':').map(Number); return h * 60 + (m || 0); };

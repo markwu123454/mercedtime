@@ -242,3 +242,15 @@ input[type='number'].field { width: 90px; }
 .inline-form .field { width: 260px; }
 .masthead-link { text-decoration: underline; cursor: pointer; }
 .masthead-link:hover { color: var(--white); }
+
+/* --- schedule generator -------------------------------------------------------- */
+.generator { padding-bottom: var(--spacing-07); }
+.gen-controls { display: flex; flex-wrap: wrap; gap: var(--spacing-05); align-items: flex-end; padding: 0 var(--spacing-05) var(--spacing-04); }
+.gen-field { display: flex; flex-direction: column; gap: var(--spacing-02); font-size: var(--label-01-size); color: var(--text-helper); text-transform: uppercase; letter-spacing: var(--label-01-spacing); }
+.gen-field .field { text-transform: none; color: var(--text-primary); }
+.gen-days { display: flex; gap: var(--spacing-04); height: 32px; align-items: center; text-transform: none; color: var(--text-primary); font-size: var(--body-compact-size); }
+.gen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--spacing-05); padding: var(--spacing-04) var(--spacing-05); }
+.gen-card { background: var(--layer-01); border: 1px solid var(--border-subtle); padding: var(--spacing-04); display: flex; flex-direction: column; gap: var(--spacing-03); }
+.gen-meta { font-size: var(--label-01-size); color: var(--text-secondary); }
+.gen-crns { display: flex; flex-wrap: wrap; gap: var(--spacing-02); }
+.gen-card .button-primary { align-self: flex-start; }
