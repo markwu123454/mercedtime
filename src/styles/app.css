@@ -346,3 +346,4 @@ button.chip:disabled { cursor: default; }
 .clickable-row { cursor: pointer; }
 .section-line { padding: var(--spacing-03) 0; border-top: 1px solid var(--border-subtle); font-size: var(--label-01-size); }
 .section-line:first-of-type { border-top: 0; }
+.req-desc { margin: 0 0 var(--spacing-03); color: var(--text-secondary); font-size: var(--label-01-size); }

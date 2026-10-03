@@ -2,7 +2,7 @@
 // does to an audit's open requirements. (The HTML parsers need a browser; see
 // fixtures/uachieve/README.md.) Run: npm run check
 import assert from 'node:assert/strict';
-import { auditIdFromHref, courseKeyOf, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, unmetNodes } from '../src/lib/degree.js';
+import { auditIdFromHref, courseKeyOf, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, splitHeading, unmetNodes } from '../src/lib/degree.js';
 
 assert.equal(normalizeNumber('10H'), '010H');
 assert.equal(normalizeNumber('010h'), '010H');
@@ -12,6 +12,18 @@ assert.equal(courseKeyOf('sprk', '010H'), 'SPRK010H');
 assert.equal(keyFromCourseText('ENGR 057'), 'ENGR057');
 assert.equal(keyFromCourseText(' sprk 010h '), 'SPRK010H');
 assert.equal(keyFromCourseText('Transfer credit'), null, 'text that is not a course is ignored');
+
+// headings as the real audit shows them, with the title and instruction run together
+const cases = [
+    ['Aerospace Engineering EmphasisComplete three of the following courses:', 'Aerospace Engineering Emphasis', 'Complete three of the following courses:'],
+    ['ME Major Requirements All courses must be completed with a C- grade or better', 'ME Major Requirements', 'All courses must be completed with a C- grade or better'],
+    ['Introductory Physics IComplete the following courses:', 'Introductory Physics I', 'Complete the following courses:'],
+    ['Mathematics RequirementComplete five courses from the following list:', 'Mathematics Requirement', 'Complete five courses from the following list:'],
+    ['Computing RequirementComplete the following course:', 'Computing Requirement', 'Complete the following course:'],
+    ['Residency', 'Residency', ''],
+    ['Complete Core', 'Complete Core', ''],
+];
+for (const [text, title, description] of cases) assert.deepEqual(splitHeading(text), { title, description }, text);
 
 const seq = Buffer.from('!!!!intSeqNo=40392277').toString('base64');
 assert.equal(auditIdFromHref(`read.html?id=JobQueueRun!!!!${seq}`).seq, 40392277, 'the audit number is inside the id');

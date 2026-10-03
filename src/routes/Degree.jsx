@@ -168,6 +168,7 @@ function Requirement({ req, ri, sim, terms, planKeys, doneKeys, takingKeys, sele
                     </span>
                 ) : null}
             </div>
+            {req.description && <p className="req-desc">{req.description}</p>}
             {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} takingKeys={takingKeys} selected={selected} onSelect={onSelect} />}
             {req.subs.map((sub, si) => (
                 <div key={si} className="sub-row">
@@ -191,6 +192,7 @@ function Node({ node, id, sim, terms, planKeys, doneKeys, takingKeys, selected, 
                     <span className="placeholder">{hit ? 'In your plan' : label}{node.earned ? ` · ${node.earned} units earned` : ''}{node.inProgress ? ` · ${node.inProgress} in progress` : ''}</span>
                 </div>
             )}
+            {hasTitle && node.description && <p className="req-desc">{node.description}</p>}
             {node.courses.length > 0 && (
                 <div className="applied">
                     {node.courses.map((c, i) => {

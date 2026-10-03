@@ -8,7 +8,7 @@
 // fails soft: anything not found comes back empty, never as a thrown error. Only a signed-out
 // session throws, as AuditSessionError.
 
-import { auditIdFromHref } from './degree.js';
+import { auditIdFromHref, splitHeading } from './degree.js';
 
 export const AUDIT_BASE = 'https://ucmerced.uachieve.com/selfservice';
 
@@ -16,7 +16,29 @@ export class AuditSessionError extends Error {
     constructor() { super('uAchieve session ended'); this.name = 'AuditSessionError'; }
 }
 
-const clean = (n) => (n?.textContent || '').replace(/\s+/g, ' ').trim();
+// The text of a node with a space wherever one element ends and the next begins. textContent
+// runs "<b>Physics I</b><span>Complete the following</span>" together as "Physics ICompl...", and
+// splits no "MATH" from "021" when they are separate spans.
+function clean(node) {
+    if (!node) return '';
+    let out = '';
+    const walk = (n) => {
+        if (n.nodeType === 3) out += n.nodeValue;
+        else if (n.nodeType === 1) { out += ' '; n.childNodes.forEach(walk); out += ' '; }
+    };
+    walk(node);
+    return out.replace(/\s+/g, ' ').trim();
+}
+
+/** A requirement's heading as { title, description }. The words that start an instruction find
+ *  the split; failing that, a heading made of exactly two elements is title then description. */
+function heading(el) {
+    if (!el) return { title: '', description: '' };
+    const byWords = splitHeading(clean(el));
+    if (byWords.description) return byWords;
+    const parts = [...el.children].map(clean).filter(Boolean);
+    return parts.length === 2 ? { title: parts[0], description: parts[1] } : byWords;
+}
 const num = (n) => { const m = clean(n).match(/-?\d+(?:\.\d+)?/); return m ? Number(m[0]) : null; };
 const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
 
@@ -97,8 +119,8 @@ function readOptions(node) {
 /** The audit report (read.html).
  *
  *  Returns { header: { earned, needed, catalog, prepared }, historyHref,
- *  requirements: [{ name, title, status, needs: { hours, count }, courses, options,
- *  subs: [{ title, status, earned, inProgress, courses, options }] }] }.
+ *  requirements: [{ name, title, description, status, needs: { hours, count }, courses, options,
+ *  subs: [{ title, description, status, earned, inProgress, courses, options }] }] }.
  *  Status is OK (met), IP (met once in-progress courses finish), NO or NONE. */
 export function parseAudit(html) {
     const doc = parse(html);
@@ -122,7 +144,7 @@ export function parseAudit(html) {
             const totals = el.querySelector('table.requirementTotals tr.reqNeeds');
             requirements.push({
                 name: (String(el.className).match(/rname_(\S+)/) || [])[1] || '',
-                title: clean(el.querySelector('.reqTitle')),
+                ...heading(el.querySelector('.reqTitle')),
                 status: status(el, /Status_(OK|NO|IP|NONE)/),
                 needs: { hours: num(totals?.querySelector('.hours')), count: num(totals?.querySelector('.count')) },
                 courses: readCourses(el),
@@ -132,7 +154,7 @@ export function parseAudit(html) {
         } else if (requirements.length) {
             const marker = el.querySelector('[class*="srTitle_substatus"]') || el;
             requirements[requirements.length - 1].subs.push({
-                title: clean(el.querySelector('.subreqTitle')),
+                ...heading(el.querySelector('.subreqTitle')),
                 status: status(marker, /srTitle_substatus(OK|NO|IP)/),
                 earned: num(el.querySelector('.subreqEarned')),
                 inProgress: num(el.querySelector('.subreqIpHours')),

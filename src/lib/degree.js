@@ -16,6 +16,21 @@ export function normalizeNumber(n) {
 export const courseKeyOf = (department, number) =>
     `${String(department ?? '').trim().toUpperCase()}${normalizeNumber(number)}`;
 
+// How a requirement's instruction starts. An audit heading is a title and an instruction in one
+// element ("Introductory Physics I" + "Complete the following courses:"), and the two can arrive
+// with nothing between them.
+const INSTRUCTION = /(Complete|All courses|All of the following|Choose|Select|Earn|A minimum of|At least)(?=[\s\w])/;
+
+/** "Mathematics RequirementComplete five courses from the following list:" ->
+ *  { title: 'Mathematics Requirement', description: 'Complete five courses from the following list:' }.
+ *  Text with no instruction in it is all title. */
+export function splitHeading(text) {
+    const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+    const m = INSTRUCTION.exec(t);
+    if (m && m.index > 0) return { title: t.slice(0, m.index).trim(), description: t.slice(m.index).trim() };
+    return { title: t, description: '' };
+}
+
 /** "ENGR 057" or "SPRK 010H" as a course key, or null for text that is not a course. */
 export function keyFromCourseText(text) {
     const m = String(text ?? '').trim().match(/^([A-Za-z]{2,5})\s*(\d+[A-Za-z]*)$/);
