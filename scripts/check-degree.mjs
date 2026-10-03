@@ -2,12 +2,16 @@
 // does to an audit's open requirements. (The HTML parsers need a browser; see
 // fixtures/uachieve/README.md.) Run: npm run check
 import assert from 'node:assert/strict';
-import { auditIdFromHref, courseKeyOf, normalizeNumber, plannedCourses, simulatePlan, unmetNodes } from '../src/lib/degree.js';
+import { auditIdFromHref, courseKeyOf, keyFromCourseText, normalizeNumber, plannedCourses, simulatePlan, unmetNodes } from '../src/lib/degree.js';
 
 assert.equal(normalizeNumber('10H'), '010H');
 assert.equal(normalizeNumber('010h'), '010H');
 assert.equal(normalizeNumber('172'), '172');
 assert.equal(courseKeyOf('sprk', '010H'), 'SPRK010H');
+
+assert.equal(keyFromCourseText('ENGR 057'), 'ENGR057');
+assert.equal(keyFromCourseText(' sprk 010h '), 'SPRK010H');
+assert.equal(keyFromCourseText('Transfer credit'), null, 'text that is not a course is ignored');
 
 const seq = Buffer.from('!!!!intSeqNo=40392277').toString('base64');
 assert.equal(auditIdFromHref(`read.html?id=JobQueueRun!!!!${seq}`).seq, 40392277, 'the audit number is inside the id');

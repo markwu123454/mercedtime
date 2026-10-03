@@ -16,6 +16,12 @@ export function normalizeNumber(n) {
 export const courseKeyOf = (department, number) =>
     `${String(department ?? '').trim().toUpperCase()}${normalizeNumber(number)}`;
 
+/** "ENGR 057" or "SPRK 010H" as a course key, or null for text that is not a course. */
+export function keyFromCourseText(text) {
+    const m = String(text ?? '').trim().match(/^([A-Za-z]{2,5})\s*(\d+[A-Za-z]*)$/);
+    return m ? courseKeyOf(m[1], m[2]) : null;
+}
+
 /** The audit id inside a read.html link: ".../read.html?id=JobQueueRun!!!!<base64>" where the
  *  base64 is "!!!!intSeqNo=40392277". Returns { param, seq } (seq null if it will not decode). */
 export function auditIdFromHref(href) {

@@ -319,9 +319,19 @@ a.button-ghost { display: inline-flex; align-items: center; text-decoration: non
 .sub-row { border-top: 1px solid var(--border-subtle); padding: var(--spacing-03) 0; }
 .sub-head { display: flex; gap: var(--spacing-03); align-items: center; margin-bottom: var(--spacing-02); }
 .applied { display: flex; flex-wrap: wrap; gap: var(--spacing-02); align-items: center; margin: var(--spacing-02) 0; }
-.chip-course { font-family: var(--font-mono); }
-.chip-ip { background: var(--yellow-10); }
-.chip-option { border: 0; cursor: pointer; background: var(--blue-10); color: var(--blue-70); font: inherit; font-family: var(--font-mono); font-size: var(--label-01-size); padding: 0 var(--spacing-03); height: 22px; }
-.chip-option:hover:not(:disabled) { background: var(--blue-20, #d0e2ff); }
-.chip-planned { background: var(--green-10); color: #0e6027; cursor: default; }
-.planned-hit { margin: var(--spacing-02) 0; color: #0e6027; }
+.chip-done, .chip-plan, .chip-todo { font-family: var(--font-mono); }
+.chip-done { background: var(--green-10); color: #0e6027; }
+.chip-ip { outline: 1px dashed #24a148; outline-offset: -1px; }       /* done once the course finishes */
+.chip-plan { background: var(--blue-10); color: var(--blue-70); }
+.chip-todo { background: var(--gray-20); color: var(--text-secondary); }
+.tag-req-done { background: var(--green-10); color: #0e6027; }
+.tag-req-plan { background: var(--blue-10); color: var(--blue-70); }
+.tag-req-todo { background: var(--gray-20); color: var(--text-secondary); }
+.dot-req-done { background: var(--support-success); }
+.dot-req-plan { background: var(--blue-60); }
+.dot-req-todo { background: var(--gray-50); }
+.swatch { display: inline-block; width: 12px; height: 12px; margin-right: var(--spacing-02); }
+.swatch-done { background: var(--green-10); border: 1px solid #24a148; }
+.swatch-plan { background: var(--blue-10); border: 1px solid var(--blue-60); }
+.swatch-todo { background: var(--gray-20); border: 1px solid var(--gray-50); }
+.planned-hit { margin: var(--spacing-02) 0; color: var(--blue-70); }

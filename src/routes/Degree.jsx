@@ -1,20 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useStore, loadDegree, runNewAudit, loadSections, addPlanCourse } from '../lib/store.js';
+import { useStore, loadDegree, runNewAudit, loadSections } from '../lib/store.js';
 import { AUDIT_BASE } from '../lib/audit.js';
-import { courseKeyOf, normalizeNumber, plannedCourses, simulatePlan } from '../lib/degree.js';
+import { courseKeyOf, keyFromCourseText, plannedCourses, simulatePlan } from '../lib/degree.js';
 import { creditNum } from '../lib/sections.js';
 import { termName, ago } from './shared.jsx';
 
-const STATUS = { OK: ['Complete', 'ok'], IP: ['In progress', 'low'], NO: ['Needed', 'full'], NONE: ['No status', 'none'] };
+// Three states, three colours, everywhere on this page: done is green, in your plan is blue,
+// and on a requirement but not planned is gray. A requirement in progress counts as done.
+const STATUS = { OK: ['Complete', 'done'], IP: ['In progress', 'done'], NO: ['Needed', 'todo'], NONE: ['No status', 'todo'] };
 const OPTION_CAP = 24;
 
 // What is left of the degree, from the student's newest uAchieve audit, and what the courses
 // planned in this app would do to it. Reading is automatic; running a new audit is a button,
 // because that adds an audit to the student's saved list.
 export default function Degree() {
-    const { degree, planAll, terms, home, settings, sectionsByTerm, cacheMeta } = useStore((s) => s);
+    const { degree, planAll, terms, sectionsByTerm, cacheMeta } = useStore((s) => s);
     const [tab, setTab] = useState('audit');
-    const [into, setInto] = useState(null);
 
     useEffect(() => { loadDegree(); }, []);
 
@@ -23,13 +24,18 @@ export default function Degree() {
     // Units come from the planned term's classes where they are saved.
     useEffect(() => { plannedTerms.filter((t) => cacheMeta[t]).forEach((t) => loadSections(t).catch(() => {})); }, [plannedTerms, cacheMeta]);
 
-    const choices = [...new Set([home.nextTerm, ...plannedTerms, ...(settings.extraTerms || [])].filter(Boolean))]
-        .sort((a, b) => Number(a) - Number(b));
-    const target = into || home.nextTerm || choices[0] || null;
-
     const { audit, history, meta, status } = degree;
     const sim = useMemo(() => (audit ? simulatePlan(audit, planned) : null), [audit, planned]);
     const planKeys = useMemo(() => new Set(planned.map((p) => p.key)), [planned]);
+    // Courses already taken or in progress, from the audit's applied courses and the history.
+    const doneKeys = useMemo(() => {
+        const keys = new Set();
+        for (const req of audit?.requirements || []) {
+            for (const node of [req, ...req.subs]) for (const c of node.courses) { const k = keyFromCourseText(c.course); if (k) keys.add(k); }
+        }
+        for (const h of history || []) { const k = keyFromCourseText(h.course); if (k) keys.add(k); }
+        return keys;
+    }, [audit, history]);
 
     const plannedUnits = useMemo(() => {
         let units = 0;
@@ -49,11 +55,6 @@ export default function Degree() {
     return (
         <div className="page-scroll">
             <div className="toolbar">
-                <label className="gen-field">Plan courses into
-                    <select className="field select-field" value={target || ''} onChange={(e) => setInto(e.target.value)} disabled={!choices.length}>
-                        {choices.map((c) => <option key={c} value={c}>{termName(terms, c)}</option>)}
-                    </select>
-                </label>
                 <button className="button-ghost" onClick={() => loadDegree({ force: true })} disabled={status === 'loading'}>Refresh</button>
                 <button className="button-ghost" onClick={run} disabled={degree.running}>Run a new audit</button>
                 <a className="button-ghost" href={`${AUDIT_BASE}/audit/list.html`} target="_blank" rel="noreferrer">Open uAchieve &rarr;</a>
@@ -62,6 +63,14 @@ export default function Degree() {
                     {status !== 'loading' && !degree.running && meta && `Read ${ago(meta.fetchedAt)}`}
                 </span>
             </div>
+
+            {audit && tab === 'audit' && (
+                <div className="legend">
+                    <span className="legend-item"><span className="swatch swatch-done" />Done</span>
+                    <span className="legend-item"><span className="swatch swatch-plan" />In your plan</span>
+                    <span className="legend-item"><span className="swatch swatch-todo" />On the requirement, not planned</span>
+                </div>
+            )}
 
             {status === 'signed-out' && (
                 <div className="status status-error">
@@ -85,7 +94,7 @@ export default function Degree() {
                         <>
                             <Summary audit={audit} plannedUnits={plannedUnits} planned={planned.length} sim={sim} />
                             {audit.requirements.map((req, ri) => (
-                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} target={target} />
+                                <Requirement key={ri} req={req} ri={ri} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />
                             ))}
                         </>
                     )}
@@ -126,32 +135,31 @@ function Summary({ audit, plannedUnits, planned, sim }) {
     );
 }
 
-function Requirement({ req, ri, sim, terms, planKeys, target }) {
+function Requirement({ req, ri, sim, terms, planKeys, doneKeys }) {
     const [label, tone] = STATUS[req.status] || STATUS.NONE;
     const done = sim?.completes[ri] && req.status === 'NO';
     return (
         <section className="card requirement-card">
             <div className="req-head">
                 <h3 className="req-title">{req.title || req.name}</h3>
-                <span className={`tag tag-${tone === 'none' ? 'term-past' : tone}`}>{label}</span>
-                {done && <span className="tag tag-term-current">Your plan finishes this</span>}
+                <span className={`tag tag-req-${done ? 'plan' : tone}`}>{done ? 'Your plan finishes this' : label}</span>
                 {req.status === 'NO' && (req.needs.hours || req.needs.count) ? (
                     <span className="placeholder">
                         needs {req.needs.hours ? `${req.needs.hours} units` : ''}{req.needs.hours && req.needs.count ? ', ' : ''}{req.needs.count ? `${req.needs.count} course${req.needs.count === 1 ? '' : 's'}` : ''}
                     </span>
                 ) : null}
             </div>
-            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} target={target} />}
+            {req.subs.length === 0 && <Node node={req} id={`${ri}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />}
             {req.subs.map((sub, si) => (
                 <div key={si} className="sub-row">
-                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} target={target} />
+                    <Node node={sub} id={`${ri}.${si}`} sim={sim} terms={terms} planKeys={planKeys} doneKeys={doneKeys} />
                 </div>
             ))}
         </section>
     );
 }
 
-function Node({ node, id, sim, terms, planKeys, target }) {
+function Node({ node, id, sim, terms, planKeys, doneKeys }) {
     const [label, tone] = STATUS[node.status] || STATUS.NONE;
     const hit = sim?.assigned[id];
     const hasTitle = 'title' in node && node.title && node.subs === undefined;
@@ -159,15 +167,15 @@ function Node({ node, id, sim, terms, planKeys, target }) {
         <>
             {hasTitle && (
                 <div className="sub-head">
-                    <span className={`dot dot-${tone === 'none' ? 'low' : tone}`} />
+                    <span className={`dot dot-req-${hit ? 'plan' : tone}`} />
                     <strong>{node.title}</strong>
-                    <span className="placeholder">{label}{node.earned ? ` · ${node.earned} units earned` : ''}{node.inProgress ? ` · ${node.inProgress} in progress` : ''}</span>
+                    <span className="placeholder">{hit ? 'In your plan' : label}{node.earned ? ` · ${node.earned} units earned` : ''}{node.inProgress ? ` · ${node.inProgress} in progress` : ''}</span>
                 </div>
             )}
             {node.courses.length > 0 && (
                 <div className="applied">
                     {node.courses.map((c, i) => (
-                        <span key={i} className={`chip chip-course${c.inProgress ? ' chip-ip' : ''}`} title={`${c.description}${c.term ? ` · ${c.term}` : ''}`}>
+                        <span key={i} className={`chip chip-done${c.inProgress ? ' chip-ip' : ''}`} title={`${c.description}${c.term ? ` · ${c.term}` : ''}`}>
                             {c.course}{c.grade ? ` ${c.grade}` : ''}
                         </span>
                     ))}
@@ -177,28 +185,28 @@ function Node({ node, id, sim, terms, planKeys, target }) {
                 <p className="planned-hit">Your plan covers this with <strong>{hit.subject} {hit.number}</strong> in {termName(terms, hit.term)}.</p>
             )}
             {node.status !== 'OK' && node.status !== 'IP' && node.options.length > 0 && (
-                <Options options={node.options} planKeys={planKeys} target={target} />
+                <Options options={node.options} planKeys={planKeys} doneKeys={doneKeys} />
             )}
         </>
     );
 }
 
-function Options({ options, planKeys, target }) {
+function Options({ options, planKeys, doneKeys }) {
     const [all, setAll] = useState(false);
     const shown = all ? options : options.slice(0, OPTION_CAP);
     return (
         <div className="options">
-            <span className="detail-label">Courses that count{target ? ' (click to plan)' : ''}</span>
+            <span className="detail-label">Courses that count</span>
             <div className="applied">
                 {shown.map((o) => {
                     const key = courseKeyOf(o.department, o.number);
-                    const inPlan = planKeys.has(key);
+                    const done = doneKeys.has(key);
+                    const inPlan = !done && planKeys.has(key);
                     return (
-                        <button key={key} className={`chip chip-option${inPlan ? ' chip-planned' : ''}`} disabled={!target || inPlan}
-                                title={inPlan ? 'Already in your plan' : target ? 'Add to your plan' : 'Add a semester on the Plan page first'}
-                                onClick={() => addPlanCourse(target, { key, subject: o.department.toUpperCase(), number: normalizeNumber(o.number), title: '' })}>
-                            {o.department} {o.number}{inPlan ? ' ✓' : ''}
-                        </button>
+                        <span key={key} className={`chip ${done ? 'chip-done' : inPlan ? 'chip-plan' : 'chip-todo'}`}
+                              title={done ? 'Already taken or in progress' : inPlan ? 'In your plan' : 'Not in your plan'}>
+                            {o.department} {o.number}
+                        </span>
                     );
                 })}
                 {options.length > OPTION_CAP && (
