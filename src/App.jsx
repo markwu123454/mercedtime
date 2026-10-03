@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from './lib/store.js';
 import { BASE } from './lib/api.js';
+import Home from './routes/Home.jsx';
 import Search from './routes/Search.jsx';
+import Schedule from './routes/Schedule.jsx';
 import Standing from './routes/Standing.jsx';
 import Plan from './routes/Plan.jsx';
 import History from './routes/History.jsx';
 
-// Four flat routes, no params, no nesting — react-router would be more moving parts
+// Six flat routes, no params, no nesting — react-router would be more moving parts
 // than this needs. Swap it in the moment a route grows parameters.
-function useHashRoute(fallback = 'search') {
+function useHashRoute(fallback = 'home') {
     const [route, setRoute] = useState(() => location.hash.slice(2) || fallback);
     useEffect(() => {
         const on = () => setRoute(location.hash.slice(2) || fallback);
@@ -19,9 +21,11 @@ function useHashRoute(fallback = 'search') {
 }
 
 const TABS = [
-    ['standing', 'Standing'],
+    ['home', 'Home'],
     ['search', 'Find classes'],
     ['plan', 'Plan'],
+    ['schedule', 'Schedule'],
+    ['standing', 'Standing'],
     ['history', 'Record'],
 ];
 
@@ -50,10 +54,12 @@ export default function App() {
 
             <Notifications items={notifications} />
 
-            {route === 'standing' ? <Standing />
+            {route === 'search' ? <Search />
                 : route === 'plan' ? <Plan />
+                : route === 'schedule' ? <Schedule />
+                : route === 'standing' ? <Standing />
                 : route === 'history' ? <History />
-                : <Search />}
+                : <Home />}
         </>
     );
 }

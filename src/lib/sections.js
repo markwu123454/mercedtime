@@ -248,3 +248,15 @@ export const parseQuery = (raw) => ({
     needle: squash(raw),
     words: raw.trim().split(/\s+/).map(squash).filter(Boolean),
 });
+
+// --- typed course ids ------------------------------------------------------------
+
+/** "me 1", "ME001", "Me 001" -> { key: 'ME001', subject: 'ME', number: '001' }, or null.
+ *  Course numbers are three digits in Banner, so short ones are padded. */
+export function parseCourseInput(raw) {
+    const m = String(raw).trim().match(/^([A-Za-z]{2,5})\s*(\d{1,3})([A-Za-z]{0,2})$/);
+    if (!m) return null;
+    const subject = m[1].toUpperCase();
+    const number = m[2].padStart(3, '0') + m[3].toUpperCase();
+    return { key: subject + number, subject, number };
+}

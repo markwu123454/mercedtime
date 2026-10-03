@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useStore, selectTerm, togglePlan } from '../lib/store.js';
+import { useStore, selectTerm, togglePlanSection, togglePlanCourse } from '../lib/store.js';
 import * as api from '../lib/api.js';
 import {
     groupCourses, parseQuery, searchRank, RANK_MISS,
@@ -158,7 +158,7 @@ export default function Search() {
                         </tbody>
                     </table>
                 </div>
-                <DetailPane selection={selection} term={term} plan={plan} onTogglePlan={togglePlan} />
+                <DetailPane selection={selection} term={term} plan={plan} />
             </div>
         </>
     );
@@ -176,7 +176,7 @@ function SectionRow({ sec, className, caret, onCaret, groupTier, planned, select
                 {caret && <button className="caret" onClick={(e) => { e.stopPropagation(); onCaret(); }}
                                   aria-label={caret === '▾' ? 'Collapse linked sections' : 'Expand linked sections'}>{caret}</button>}
                 <input type="checkbox" checked={planned} onClick={(e) => e.stopPropagation()}
-                       onChange={() => togglePlan(sec.courseReferenceNumber)}
+                       onChange={() => togglePlanSection(sec)}
                        aria-label={`Add CRN ${sec.courseReferenceNumber} to plan`} />
             </td>
             <td className="numeric">{sec.courseReferenceNumber}</td>
@@ -195,7 +195,8 @@ function SectionRow({ sec, className, caret, onCaret, groupTier, planned, select
     );
 }
 
-function DetailPane({ selection, term, plan, onTogglePlan }) {
+function DetailPane({ selection, term, plan }) {
+    const planAll = useStore((s) => s.planAll);
     const [details, setDetails] = useState(null);
     const [detailError, setDetailError] = useState(null);
     const sec = selection?.type === 'section' ? selection.sec : null;
@@ -222,6 +223,13 @@ function DetailPane({ selection, term, plan, onTogglePlan }) {
                 <h2 className="detail-title">{g.subject} {g.number}</h2>
                 <div className="detail-sub">{g.title}</div>
                 <div className="detail-section">
+                    <label className="checkbox">
+                        <input type="checkbox" checked={!!planAll[term]?.[g.key]}
+                               onChange={() => togglePlanCourse(term, { key: g.key, subject: g.subject, number: g.number, title: g.title })} />
+                        Course in my plan
+                    </label>
+                </div>
+                <div className="detail-section">
                     <div className="detail-label">Options</div>
                     <div className="detail-body">
                         {g.anchors.length} schedule option{g.anchors.length === 1 ? '' : 's'} · {g.seatsOpen} seat{g.seatsOpen === 1 ? '' : 's'} across them
@@ -245,7 +253,7 @@ function DetailPane({ selection, term, plan, onTogglePlan }) {
             <div className="detail-section">
                 <label className="checkbox">
                     <input type="checkbox" checked={plan.has(sec.courseReferenceNumber)}
-                           onChange={() => onTogglePlan(sec.courseReferenceNumber)} />
+                           onChange={() => togglePlanSection(sec)} />
                     In my plan
                 </label>
             </div>

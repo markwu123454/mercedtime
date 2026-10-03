@@ -5,23 +5,38 @@
 
 import { useSyncExternalStore } from 'react';
 import * as api from './api.js';
+import { courseKey } from './sections.js';
+import { DEFAULT_SETTINGS } from './schedule.js';
+import { normalizeRegistration, registrationRows } from './registrations.js';
+import { parseTimeTicket } from './banner.js';
 
-const PLAN_KEY = 'mercedtime_plan';
+const PLAN_KEY = 'mercedtime_plan_v2';
 const TERM_KEY = 'mercedtime_term';
+const SETTINGS_KEY = 'mercedtime_settings';
 
 let state = {
     route: 'search',
     term: null,
     terms: [],
     openTerms: [],          // terms open for registration — the "may I register" signal
-    sections: [],
+    sections: [],           // the selected term's catalog
+    sectionsByTerm: {},     // every catalog loaded this session, so a term loads once
     loading: false,
     loadingText: '',
     error: null,
     auth: 'unknown',        // 'unknown' | 'in' | 'out'
     userName: null,
     notifications: [],
-    plan: new Set(),
+    // The plan, per term: { [term]: { [courseKey]: { key, subject, number, title, crns, info } } }.
+    // Keyed by course because a future term's CRNs are not published yet; a CRN is added
+    // to its course once a section exists. `info` snapshots the section label per CRN so
+    // the home page can list CRNs without loading that term's catalog.
+    planAll: {},
+    plan: new Set(),        // CRNs planned for the selected term — drives "My plan" in Find classes
+    registered: {},         // { [term]: { status: 'loading' | 'ok' | 'error', rows: [] } }
+    home: { status: 'idle', error: null, currentTerm: null, nextTerm: null, activeRows: [] },
+    tickets: {},            // { [term]: { status: 'loading' | 'ok' | 'error', at: ms | null, text } }
+    settings: DEFAULT_SETTINGS,
 };
 
 const subs = new Set();
@@ -37,21 +52,64 @@ export function useStore(select = (s) => s) {
     return useSyncExternalStore(subscribe, () => select(state));
 }
 
+const crnSet = (items) => new Set(Object.values(items || {}).flatMap((i) => i.crns));
+
 // --- plan persistence --------------------------------------------------------
 
-export async function loadPlan(term) {
-    const o = await chrome.storage.local.get(PLAN_KEY);
-    set({ plan: new Set((o[PLAN_KEY] || {})[term] || []) });
+async function savePlan(planAll) {
+    set({ planAll, plan: crnSet(planAll[state.term]) });
+    await chrome.storage.local.set({ [PLAN_KEY]: planAll });
 }
 
-export async function togglePlan(crn) {
-    const next = new Set(state.plan);
-    next.has(crn) ? next.delete(crn) : next.add(crn);
-    set({ plan: next });
-    const o = await chrome.storage.local.get(PLAN_KEY);
-    const all = o[PLAN_KEY] || {};
-    all[state.term] = [...next];
-    await chrome.storage.local.set({ [PLAN_KEY]: all });
+const withTerm = (planAll, term, fn) => {
+    const items = { ...(planAll[term] || {}) };
+    fn(items);
+    return { ...planAll, [term]: items };
+};
+
+const newItem = (c) => ({
+    key: c.key, subject: c.subject, number: c.number, title: c.title || '', crns: [], info: {},
+});
+
+/** Add or remove a whole course from a term's plan. */
+export function togglePlanCourse(term, course) {
+    return savePlan(withTerm(state.planAll, term, (items) => {
+        if (items[course.key]) delete items[course.key];
+        else items[course.key] = newItem(course);
+    }));
+}
+
+export const addPlanCourse = (term, course) =>
+    savePlan(withTerm(state.planAll, term, (items) => { items[course.key] ??= newItem(course); }));
+
+/** Add or remove one section (by CRN) under its course in the selected term's plan.
+ *  Planning a section also plans its course. */
+export function togglePlanSection(sec, term = state.term) {
+    const crn = sec.courseReferenceNumber;
+    const key = courseKey(sec);
+    return savePlan(withTerm(state.planAll, term, (items) => {
+        const item = { ...(items[key] || newItem({
+            key, subject: sec.subject, number: sec.courseNumber, title: sec.courseTitle,
+        })) };
+        item.title ||= sec.courseTitle || '';
+        if (item.crns.includes(crn)) {
+            item.crns = item.crns.filter((c) => c !== crn);
+            item.info = { ...item.info };
+            delete item.info[crn];
+        } else {
+            item.crns = [...item.crns, crn];
+            item.info = { ...item.info, [crn]: { seq: sec.sequenceNumber, type: sec.scheduleTypeDescription } };
+        }
+        items[key] = item;
+    }));
+}
+
+// --- settings -----------------------------------------------------------------
+
+export async function updateSettings(patch) {
+    const settings = { ...state.settings, ...patch };
+    set({ settings });
+    await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
 // --- session -----------------------------------------------------------------
@@ -65,10 +123,133 @@ api.onSessionLost((kind) => set({
         : null,
 }));
 
+// --- catalogs ------------------------------------------------------------------
+
+// searchResults reads the term from session state, so two catalogs loading at once
+// would trample each other's saveTerm. Every load goes through one queue.
+let queue = Promise.resolve();
+const inflight = new Map();
+
+/** One term's full section list, loaded once per session. The selected term streams
+ *  into `sections` page by page; other terms (the home page's) load quietly. */
+export function loadSections(term) {
+    const cached = state.sectionsByTerm[term];
+    if (cached) return Promise.resolve(cached);
+    if (inflight.has(term)) return inflight.get(term);
+    const p = queue.then(async () => {
+        await api.saveTerm(term);
+        const acc = [];
+        await api.searchResults(term, {
+            onPage: (page, loaded, total) => {
+                acc.push(...page);
+                // Repoint the array so subscribers see a new identity each page.
+                if (state.term === term) set({ sections: [...acc], loadingText: `Loading… ${loaded} / ${total}` });
+            },
+        });
+        // An empty answer is not cached: it can be a session that never committed the
+        // term, and caching it would hide the retry.
+        if (acc.length) set({ sectionsByTerm: { ...state.sectionsByTerm, [term]: acc } });
+        return acc;
+    });
+    queue = p.catch(() => {});
+    inflight.set(term, p);
+    p.then(() => inflight.delete(term), () => inflight.delete(term));
+    return p;
+}
+
+export async function selectTerm(term) {
+    set({ term, error: null, plan: crnSet(state.planAll[term]) });
+    await chrome.storage.local.set({ [TERM_KEY]: term });
+
+    const cached = state.sectionsByTerm[term];
+    if (cached) { set({ sections: cached, loading: false, loadingText: '' }); return; }
+
+    set({ sections: [], loading: true, loadingText: 'Loading classes…' });
+    try {
+        const acc = await loadSections(term);
+        if (state.term !== term) return;     // the user moved on while it loaded
+        set({ sections: acc, loading: false, loadingText: '' });
+        if (!acc.length) set({ error: 'No classes found for this term.' });
+    } catch (e) {
+        if (state.term !== term) return;
+        set({
+            loading: false,
+            error: e.name === 'SessionExpired'
+                ? 'Your Banner session expired. Reload the page to sign in again.'
+                : `Failed to load classes: ${e.message}`,
+        });
+    }
+}
+
+// --- registrations -----------------------------------------------------------------
+
+/** Registrations for one term, by the explicit-term endpoint. */
+export async function loadRegistered(term) {
+    if (!term || state.registered[term]?.status === 'loading') return;
+    set({ registered: { ...state.registered, [term]: { status: 'loading', rows: state.registered[term]?.rows || [] } } });
+    try {
+        const rows = registrationRows(await api.getRegistrations(term)).map((r) => normalizeRegistration(r, term));
+        set({ auth: 'in', registered: { ...state.registered, [term]: { status: 'ok', rows } } });
+    } catch {
+        set({ registered: { ...state.registered, [term]: { status: 'error', rows: [] } } });
+    }
+}
+
+// --- home page -----------------------------------------------------------------------
+
+const smallest = (codes) => codes.map(String).sort((a, b) => Number(a) - Number(b))[0] || null;
+
+/** What the home page needs: which term is "now", which is next, and the next term's
+ *  time ticket. The current term is the earliest term with active registrations. */
+async function loadHome() {
+    set({ home: { ...state.home, status: 'loading', error: null } });
+    let activeRows = [];
+    try {
+        activeRows = registrationRows(await api.getActiveRegistrations()).map((r) => normalizeRegistration(r));
+        set({ auth: 'in' });
+    } catch (e) {
+        set({ home: { ...state.home, status: 'error', error: e.name === 'SessionExpired' ? 'signed-out' : e.message } });
+    }
+    const live = activeRows.filter((r) => !r.dropped);
+    const currentTerm = smallest(live.map((r) => r.term).filter(Boolean));
+    const codes = (list) => list.map((t) => String(t.code));
+    const later = (list) => smallest(list.filter((c) => Number(c) > Number(currentTerm)));
+    // With no registrations to anchor on, fall back to the first term open for
+    // registration, then to the newest term Banner lists.
+    const nextTerm = currentTerm
+        ? later(codes(state.openTerms)) || later(codes(state.terms))
+        : smallest(codes(state.openTerms)) || codes(state.terms).sort((a, b) => Number(b) - Number(a))[0] || null;
+    set({ home: { status: state.home.status === 'error' ? 'error' : 'ok', error: state.home.error, currentTerm, nextTerm, activeRows: live } });
+
+    if (currentTerm) loadSections(currentTerm).catch(() => {});
+    if (nextTerm) loadTicket(nextTerm);
+}
+
+export async function loadTicket(term) {
+    if (state.tickets[term]?.status === 'loading') return;
+    set({ tickets: { ...state.tickets, [term]: { status: 'loading', at: null, text: null } } });
+    try {
+        const { at, text } = parseTimeTicket(await api.getRegistrationStatusHTML(term));
+        set({ tickets: { ...state.tickets, [term]: { status: 'ok', at: at ? at.getTime() : null, text } } });
+    } catch {
+        set({ tickets: { ...state.tickets, [term]: { status: 'error', at: null, text: null } } });
+    }
+}
+
+export const setTicketOverride = (term, ms) => updateSettings({
+    ticketOverride: { ...(state.settings.ticketOverride || {}), [term]: ms },
+});
+
 // --- boot --------------------------------------------------------------------
 
 export async function boot() {
     api.startKeepAlive();
+
+    const saved = await chrome.storage.local.get([PLAN_KEY, SETTINGS_KEY]);
+    set({
+        planAll: saved[PLAN_KEY] || {},
+        settings: { ...DEFAULT_SETTINGS, ...(saved[SETTINGS_KEY] || {}) },
+    });
 
     let terms = [];
     try {
@@ -85,35 +266,11 @@ export async function boot() {
 
     // Which terms are open for registration. Authenticated and optional — its absence
     // just means we cannot show the registration window, not that anything is broken.
-    // Succeeding also tells us there is a signed-in Banner session, since there is no
-    // Banner header to read the user from.
-    api.getOpenTerms().then((openTerms) => set({ openTerms, auth: 'in' })).catch(() => {});
+    const openTerms = api.getOpenTerms()
+        .then((o) => set({ openTerms: o, auth: 'in' }))
+        .catch(() => {});
 
     if (term) await selectTerm(term);
-}
-
-export async function selectTerm(term) {
-    set({ term, sections: [], error: null, loading: true, loadingText: 'Loading classes…' });
-    await chrome.storage.local.set({ [TERM_KEY]: term });
-    await loadPlan(term);
-    try {
-        await api.saveTerm(term);
-        const acc = [];
-        await api.searchResults(term, {
-            onPage: (page, loaded, total) => {
-                acc.push(...page);
-                // Repoint the array so subscribers see a new identity each page.
-                set({ sections: [...acc], loadingText: `Loading… ${loaded} / ${total}` });
-            },
-        });
-        set({ loading: false, loadingText: '' });
-        if (!acc.length) set({ error: 'No classes found for this term.' });
-    } catch (e) {
-        set({
-            loading: false,
-            error: e.name === 'SessionExpired'
-                ? 'Your Banner session expired. Reload the page to sign in again.'
-                : `Failed to load classes: ${e.message}`,
-        });
-    }
+    await openTerms;
+    loadHome();
 }

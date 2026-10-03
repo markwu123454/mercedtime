@@ -19,6 +19,7 @@ state machine with conditional interstitials and the failure modes cost real sea
 ```bash
 npm install
 npm run build      # or: npm run watch
+npm run check      # offline checks of the schedule maths
 ```
 
 Load `dist/` as an unpacked extension. A service worker redirects
@@ -35,7 +36,7 @@ src/
   lib/sections.js     pure Banner data logic — bundles, seats, tiers, search ranking
   lib/banner.js       parses Banner's server-rendered status HTML
   lib/store.js        shared state + plan persistence
-  routes/             Search (built), Standing / Plan / History (stubs)
+  routes/             Home, Search, Plan, Schedule (built); Standing / History (stubs)
 fixtures/             offline test data — see below
 scripts/              the scrapers that produced the fixtures
 ```

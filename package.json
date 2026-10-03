@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build",
     "watch": "vite build --watch",
-    "fixture": "node scripts/make-sample-fixture.mjs"
+    "check": "node scripts/check-schedule.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",
