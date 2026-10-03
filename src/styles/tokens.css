@@ -8,6 +8,10 @@
    v11 White theme; keep them verbatim so they stay recognisable and easy to cross-check. */
 
 :host {
+    /* UC Merced logo colours, sampled from the logo itself */
+    --brand-blue: #0f2e53;
+    --brand-gold: #d8ac27;
+
     /* --- palette: Carbon gray ------------------------------------------------ */
     --gray-10: #f4f4f4;
     --gray-20: #e0e0e0;

@@ -44,7 +44,7 @@ export default function App() {
     return (
         <>
             <header className="masthead">
-                <span className="masthead-brand">UC Merced <b>MercedTime</b></span>
+                <span className="masthead-brand"><span className="brand-merced">Merced</span><span className="brand-time">Time</span></span>
                 <nav className="nav">
                     {TABS.map(([id, label]) => (
                         <a key={id} href={`#/${id}`} className="nav-item"

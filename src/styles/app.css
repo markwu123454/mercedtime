@@ -35,13 +35,19 @@
     background: var(--gray-100); color: var(--text-on-color);
 }
 .masthead-brand { font-size: var(--body-compact-size); letter-spacing: 0.1px; }
-.masthead-brand b { font-weight: 600; }
+.masthead-brand {
+    font-weight: 600;
+    /* The logo colours need a light ground: navy on the dark bar is barely visible. */
+    background: var(--white); padding: 4px var(--spacing-04);
+}
+.brand-merced { color: var(--brand-blue); }
+.brand-time { color: var(--brand-gold); }
 .masthead-spacer { margin-left: auto; }
 .masthead-user { color: var(--gray-30); font-size: var(--label-01-size); }
 
 .nav { display: flex; height: 100%; }
 .nav-item {
-    display: flex; align-items: center; padding: 0 var(--spacing-05);
+    display: flex; align-items: center; padding: 0 var(--spacing-05); white-space: nowrap;
     background: none; border: 0; cursor: pointer;
     color: var(--gray-30); font: inherit; font-size: var(--body-compact-size);
     border-bottom: 3px solid transparent;
